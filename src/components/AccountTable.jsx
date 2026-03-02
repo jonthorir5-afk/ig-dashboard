@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, ChevronUp, Search, Filter, ArrowUpRight, Copy } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Filter, Copy, ExternalLink, Mail, Lock } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import { ACCOUNT_STATUSES } from '../utils/mockData';
 
 const AccountTable = ({ accounts, onStatusChange }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [sortConfig, setSortConfig] = useState({ key: 'totalViews', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
 
     // Filter and Sort Logic
     const filteredData = useMemo(() => {
@@ -14,7 +14,8 @@ const AccountTable = ({ accounts, onStatusChange }) => {
 
         if (searchTerm) {
             result = result.filter(acc =>
-                acc.username.toLowerCase().includes(searchTerm.toLowerCase())
+                acc.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                acc.id.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
@@ -24,10 +25,17 @@ const AccountTable = ({ accounts, onStatusChange }) => {
 
         if (sortConfig.key) {
             result.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) {
+                let aVal = a[sortConfig.key];
+                let bVal = b[sortConfig.key];
+
+                // Allow empty strings to sort to bottom usually
+                if (aVal == null) aVal = '';
+                if (bVal == null) bVal = '';
+
+                if (aVal < bVal) {
                     return sortConfig.direction === 'asc' ? -1 : 1;
                 }
-                if (a[sortConfig.key] > b[sortConfig.key]) {
+                if (aVal > bVal) {
                     return sortConfig.direction === 'asc' ? 1 : -1;
                 }
                 return 0;
@@ -45,7 +53,14 @@ const AccountTable = ({ accounts, onStatusChange }) => {
         setSortConfig({ key, direction });
     };
 
+    const copyToClipboard = (text) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text);
+        // Could add a toast notification here
+    };
+
     const formatNumber = (num) => {
+        if (!num) return '0';
         if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
         return num.toString();
@@ -58,7 +73,7 @@ const AccountTable = ({ accounts, onStatusChange }) => {
                     <Search size={18} className="search-icon" />
                     <input
                         type="text"
-                        placeholder="Search accounts..."
+                        placeholder="Search handles or IDs..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -80,82 +95,104 @@ const AccountTable = ({ accounts, onStatusChange }) => {
             </div>
 
             <div className="table-responsive">
-                <table className="accounts-table">
+                <table className="accounts-table" style={{ minWidth: '1000px' }}>
                     <thead>
                         <tr>
-                            <th>Account</th>
+                            <th className="sortable" onClick={() => requestSort('id')}>
+                                Account {sortConfig.key === 'id' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                            </th>
                             <th className="sortable" onClick={() => requestSort('status')}>
                                 Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                            </th>
-                            <th className="sortable numeric" onClick={() => requestSort('totalViews')}>
-                                Total Views {sortConfig.key === 'totalViews' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                             </th>
                             <th className="sortable numeric" onClick={() => requestSort('followers')}>
                                 Followers {sortConfig.key === 'followers' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                             </th>
-                            <th className="sortable numeric" onClick={() => requestSort('engagementRate')}>
-                                Engagement {sortConfig.key === 'engagementRate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                            <th className="sortable numeric" onClick={() => requestSort('totalViews')}>
+                                Total Views {sortConfig.key === 'totalViews' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                             </th>
-                            <th className="sortable numeric" onClick={() => requestSort('hoursActive')}>
-                                Hours Active {sortConfig.key === 'hoursActive' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                            <th className="sortable numeric" onClick={() => requestSort('engagementRate')} style={{ whiteSpace: 'nowrap' }}>
+                                Eng. Rate {sortConfig.key === 'engagementRate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                             </th>
                             <th className="sortable numeric" onClick={() => requestSort('ofSubscribers')} style={{ color: 'var(--accent-secondary)' }}>
                                 OF Subs {sortConfig.key === 'ofSubscribers' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                             </th>
-                            <th>Actions</th>
+                            <th>Credentials</th>
+                            <th>Links</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filteredData.length > 0 ? (
-                            filteredData.map((account, index) => (
+                            filteredData.map((account) => (
                                 <tr key={account.id} className={account.status === ACCOUNT_STATUSES.WINNER ? 'highlight-row' : ''}>
                                     <td>
                                         <div className="account-identifier">
                                             <div className="account-avatar flex-center">
-                                                {account.username.charAt(0).toUpperCase()}
+                                                {account.username ? account.username.charAt(0).toUpperCase() : '?'}
                                             </div>
                                             <div className="account-names">
-                                                <strong>@{account.username}</strong>
+                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <strong>@{account.username}</strong>
+                                                    <button className="icon-btn tooltip" style={{ padding: '0 4px', background: 'none' }} data-tip="Copy Username" onClick={() => copyToClipboard(account.username)}>
+                                                        <Copy size={12} />
+                                                    </button>
+                                                </div>
                                                 <span className="account-id">{account.id}</span>
                                             </div>
                                         </div>
                                     </td>
                                     <td>
                                         <StatusBadge status={account.status} />
-                                        {account.isNew && <span className="new-tag ml-2">NEW</span>}
+                                        {account.status === ACCOUNT_STATUSES.WINNER && (
+                                            <button
+                                                className="btn btn-outline text-xs px-2 py-1 mt-1"
+                                                onClick={() => onStatusChange(account.id, ACCOUNT_STATUSES.SCALING)}
+                                                style={{ display: 'block', padding: '2px 6px', fontSize: '10px' }}
+                                            >
+                                                Scale
+                                            </button>
+                                        )}
+                                    </td>
+                                    <td className="numeric">
+                                        <span className="font-semibold">{formatNumber(account.followers)}</span>
                                     </td>
                                     <td className="numeric font-semibold">
                                         {formatNumber(account.totalViews)}
                                     </td>
                                     <td className="numeric">
-                                        <span className="font-semibold">{formatNumber(account.followers)}</span>
-                                        <span className="velocity-badge">{account.velocity}</span>
-                                    </td>
-                                    <td className="numeric">
-                                        {account.engagementRate}%
-                                    </td>
-                                    <td className="numeric">
-                                        {account.hoursActive}h
+                                        {account.engagementRate || 0}%
                                     </td>
                                     <td className="numeric font-semibold" style={{ color: 'var(--accent-secondary)' }}>
-                                        {formatNumber(account.ofSubscribers || 0)}
+                                        {formatNumber(account.ofSubscribers)}
                                     </td>
-                                    <td className="actions-cell">
-                                        <button className="icon-btn tooltip" data-tip="Copy Link">
-                                            <Copy size={16} />
-                                        </button>
-                                        <button className="icon-btn tooltip text-accent" data-tip="Open IG">
-                                            <ArrowUpRight size={16} />
-                                        </button>
-
-                                        {account.status === ACCOUNT_STATUSES.WINNER && (
-                                            <button
-                                                className="btn btn-outline text-xs px-2 py-1 ml-2"
-                                                onClick={() => onStatusChange(account.id, ACCOUNT_STATUSES.SCALING)}
-                                            >
-                                                Start Scaling
-                                            </button>
-                                        )}
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
+                                            {account.email && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="tooltip" data-tip="Copy Email" onClick={() => copyToClipboard(account.email)}>
+                                                    <Mail size={12} className="text-secondary" />
+                                                    <span style={{ cursor: 'pointer', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</span>
+                                                </div>
+                                            )}
+                                            {account.password && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="tooltip" data-tip="Copy Password" onClick={() => copyToClipboard(account.password)}>
+                                                    <Lock size={12} className="text-secondary" />
+                                                    <span style={{ cursor: 'pointer' }}>••••••••</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            {account.juicyLink && (
+                                                <a href={account.juicyLink} target="_blank" rel="noopener noreferrer" className="btn btn-outline text-xs px-2 py-1 tooltip" data-tip="Juicy Bio">
+                                                    <ExternalLink size={12} style={{ marginRight: '4px' }} /> Bio
+                                                </a>
+                                            )}
+                                            {account.igLink && (
+                                                <a href={account.igLink} target="_blank" rel="noopener noreferrer" className="btn btn-primary text-xs px-2 py-1 tooltip" data-tip="Instagram Profile">
+                                                    <ExternalLink size={12} style={{ marginRight: '4px' }} /> IG
+                                                </a>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
