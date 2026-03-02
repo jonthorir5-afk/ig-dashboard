@@ -44,7 +44,13 @@ export const fetchGoogleSheetData = (csvUrl) => {
                         originalRow: row // Save original for debugging or dynamic rendering
                     };
                 });
-                resolve(parsedData);
+                // Filter out accounts that are not currently active, scaling, or winners
+                const activeData = parsedData.filter(account =>
+                    account.status === ACCOUNT_STATUSES.ACTIVE ||
+                    account.status === ACCOUNT_STATUSES.SCALING ||
+                    account.status === ACCOUNT_STATUSES.WINNER
+                );
+                resolve(activeData);
             },
             error: (error) => {
                 reject(error);

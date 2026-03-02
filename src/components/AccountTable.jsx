@@ -6,7 +6,7 @@ import { ACCOUNT_STATUSES } from '../utils/mockData';
 const AccountTable = ({ accounts, onStatusChange }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'totalViews', direction: 'desc' });
 
     // Filter and Sort Logic
     const filteredData = useMemo(() => {
