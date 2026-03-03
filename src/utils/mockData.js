@@ -7,6 +7,7 @@ export const ACCOUNT_STATUSES = {
 
 const firstNames = ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan', 'Avery', 'Sam', 'Skyler'];
 const niches = ['travel', 'fitness', 'finance', 'luxury', 'tech', 'quotes', 'motivation'];
+const mockModels = ['Jane Doe', 'John Smith', 'Alex Roe', 'Unknown Model'];
 
 export const generateMockAccounts = (count = 100) => {
     const accounts = [];
@@ -66,10 +67,12 @@ export const generateMockAccounts = (count = 100) => {
 
         const niche = niches[Math.floor(Math.random() * niches.length)];
         const username = `${firstNames[Math.floor(Math.random() * firstNames.length)]}_${niche}_${Math.floor(Math.random() * 999)}`;
+        const modelName = mockModels[Math.floor(Math.random() * mockModels.length)];
 
         accounts.push({
             id: `ig-${1000 + i}`,
             username: username.toLowerCase(),
+            model: modelName,
             createdAt: createdAt.toISOString(),
             hoursActive: hoursAgo,
             totalViews,

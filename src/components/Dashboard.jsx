@@ -12,6 +12,7 @@ const Dashboard = () => {
     const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('igdash_sheet_url') || '');
     const [isConfiguring, setIsConfiguring] = useState(!localStorage.getItem('igdash_sheet_url'));
     const [fetchError, setFetchError] = useState('');
+    const [selectedModel, setSelectedModel] = useState('All');
 
     // Load Data Strategy
     const loadData = async (urlToFetch) => {
@@ -71,9 +72,19 @@ const Dashboard = () => {
         }, 800);
     };
 
+    const availableModels = useMemo(() => {
+        const models = new Set(accounts.map(acc => acc.model).filter(Boolean));
+        return ['All', ...Array.from(models).sort()];
+    }, [accounts]);
+
+    const displayedAccounts = useMemo(() => {
+        if (selectedModel === 'All') return accounts;
+        return accounts.filter(acc => acc.model === selectedModel);
+    }, [accounts, selectedModel]);
+
     // Calculate Summary Metrics
     const metrics = useMemo(() => {
-        if (!accounts.length) return {
+        if (!displayedAccounts.length) return {
             totalViews: 0,
             totalFollowers: 0,
             winnersCount: 0,
@@ -82,20 +93,20 @@ const Dashboard = () => {
             totalOfSubscribers: 0
         };
 
-        const totalViews = accounts.reduce((acc, curr) => acc + (curr.totalViews || 0), 0);
-        const totalFollowers = accounts.reduce((acc, curr) => acc + (curr.followers || 0), 0);
-        const totalOfSubscribers = accounts.reduce((acc, curr) => acc + (curr.ofSubscribers || 0), 0);
-        const winnersCount = accounts.filter(a => a.status === ACCOUNT_STATUSES.WINNER).length;
-        const scalingCount = accounts.filter(a => a.status === ACCOUNT_STATUSES.SCALING).length;
+        const totalViews = displayedAccounts.reduce((acc, curr) => acc + (curr.totalViews || 0), 0);
+        const totalFollowers = displayedAccounts.reduce((acc, curr) => acc + (curr.followers || 0), 0);
+        const totalOfSubscribers = displayedAccounts.reduce((acc, curr) => acc + (curr.ofSubscribers || 0), 0);
+        const winnersCount = displayedAccounts.filter(a => a.status === ACCOUNT_STATUSES.WINNER).length;
+        const scalingCount = displayedAccounts.filter(a => a.status === ACCOUNT_STATUSES.SCALING).length;
 
         // Avg engagement purely across active accounts
-        const activeAccounts = accounts.filter(a => a.status !== ACCOUNT_STATUSES.CREATED);
+        const activeAccounts = displayedAccounts.filter(a => a.status !== ACCOUNT_STATUSES.CREATED);
         const avgEngagement = activeAccounts.length
             ? (activeAccounts.reduce((acc, curr) => acc + (curr.engagementRate || 0), 0) / activeAccounts.length).toFixed(1)
             : 0;
 
         return { totalViews, totalFollowers, winnersCount, scalingCount, avgEngagement, totalOfSubscribers };
-    }, [accounts]);
+    }, [displayedAccounts]);
 
     const handleStatusChange = (accountId, newStatus) => {
         setAccounts(prev =>
@@ -163,7 +174,7 @@ const Dashboard = () => {
             <div className="dashboard-header">
                 <div>
                     <h1 className="text-gradient">Performance Overview</h1>
-                    <p>Tracking {accounts.length} active Instagram accounts</p>
+                    <p>Tracking {displayedAccounts.length} active Instagram accounts</p>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -176,6 +187,22 @@ const Dashboard = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Model Toggle Strip */}
+            {availableModels.length > 2 && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
+                    {availableModels.map(model => (
+                        <button
+                            key={model}
+                            className={`btn ${selectedModel === model ? 'btn-primary' : 'btn-outline'}`}
+                            onClick={() => setSelectedModel(model)}
+                            style={{ whiteSpace: 'nowrap', borderRadius: '20px', padding: '6px 16px' }}
+                        >
+                            {model}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Summary Cards Grid */}
             <div className="metrics-grid">
@@ -244,7 +271,7 @@ const Dashboard = () => {
                 </div>
 
                 <AccountTable
-                    accounts={accounts}
+                    accounts={displayedAccounts}
                     onStatusChange={handleStatusChange}
                 />
             </div>

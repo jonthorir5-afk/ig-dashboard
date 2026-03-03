@@ -23,6 +23,7 @@ export const fetchGoogleSheetData = (csvUrl) => {
                     return {
                         id: row['Account ID'] || `ig-${index + 1}`,
                         username: usernameStr.replace('@', ''),
+                        model: row['Model'] || row['Creator'] || 'Unknown Model',
                         createdAt: rawDate,
 
                         // Parse numbers if they exist, otherwise fallback to 0
