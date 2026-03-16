@@ -189,7 +189,7 @@ const Dashboard = () => {
             </div>
 
             {/* Model Toggle Strip */}
-            {availableModels.length > 2 && (
+            {availableModels.length > 1 && (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
                     {availableModels.map(model => (
                         <button
