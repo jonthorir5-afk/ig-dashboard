@@ -5,12 +5,13 @@ import { ACCOUNT_STATUSES } from './mockData'; // Fallback statuses
  * Fetches a public Google Sheets CSV URL and parses it using PapaParse.
  * Attempt to map common column names to our internal data model.
  */
-export const fetchGoogleSheetData = (csvUrl) => {
+export const fetchGoogleSheetData = (csvUrl, creatorName = 'Unknown Model') => {
     return new Promise((resolve, reject) => {
         Papa.parse(csvUrl, {
             download: true,
             header: true,
             skipEmptyLines: true,
+            transformHeader: (header) => header.trim(),
             complete: (results) => {
                 if (results.errors && results.errors.length > 0) {
                     console.error('PapaParse Errors:', results.errors);
@@ -23,7 +24,7 @@ export const fetchGoogleSheetData = (csvUrl) => {
                     return {
                         id: row['Account ID'] || `ig-${index + 1}`,
                         username: usernameStr.replace('@', ''),
-                        model: row['Model'] || row['Creator'] || 'Unknown Model',
+                        model: row['Model'] || row['Creator'] || creatorName,
                         createdAt: rawDate,
 
                         // Parse numbers if they exist, otherwise fallback to 0

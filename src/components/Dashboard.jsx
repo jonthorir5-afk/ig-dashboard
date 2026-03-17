@@ -3,27 +3,53 @@ import { generateMockAccounts, ACCOUNT_STATUSES } from '../utils/mockData';
 import { fetchGoogleSheetData } from '../utils/googleSheetsAPI';
 import { evaluateAccountThresholds, dispatchTelegramAlert } from '../utils/alertSystem';
 import AccountTable from './AccountTable';
-import { TrendingUp, Users, Eye, AlertCircle, BarChart3, Target, Link as LinkIcon, Save, Database } from 'lucide-react';
+import { TrendingUp, Users, Eye, AlertCircle, BarChart3, Target, Link as LinkIcon, Save, Database, Lock } from 'lucide-react';
 import '../App.css';
 
 const Dashboard = () => {
     const [accounts, setAccounts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('igdash_sheet_url') || '');
-    const [isConfiguring, setIsConfiguring] = useState(!localStorage.getItem('igdash_sheet_url'));
+    const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('igdash_auth') === 'true');
+    const [pinInput, setPinInput] = useState('');
+    const [pinError, setPinError] = useState('');
+
+    // Pre-configured Creators List
+    const defaultCreators = [
+        { name: 'Rose', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMyFopCThtzSKPIOuR5UF0m0StNugd-CFGWx1SxJBxp5KVvHuk-FZPH9afUAGMF3NTPey5IvtjAvs/pub?gid=1012951077&single=true&output=csv' },
+        { name: 'Ariana', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSJhDhB9GkbCSa9Udt2BAYyzbejqSP8MCvANrQastqV66JFXesocstJDw9fekVeurp_Iug8BneyKUtY/pub?gid=1012951077&single=true&output=csv' }
+    ];
+
+    const [creators, setCreators] = useState(() => {
+        const saved = localStorage.getItem('igdash_creators');
+        return saved ? JSON.parse(saved) : defaultCreators;
+    });
+
+    const [isAddingCreator, setIsAddingCreator] = useState(false);
+    const [newCreatorName, setNewCreatorName] = useState('');
+    const [newCreatorLink, setNewCreatorLink] = useState('');
     const [fetchError, setFetchError] = useState('');
     const [selectedModel, setSelectedModel] = useState('All');
 
     // Load Data Strategy
-    const loadData = async (urlToFetch) => {
+    const loadData = async () => {
         setIsLoading(true);
         setFetchError('');
         try {
-            if (!urlToFetch) throw new Error("No URL provided");
-            const liveData = await fetchGoogleSheetData(urlToFetch);
+            if (creators.length === 0) {
+                setAccounts([]);
+                setIsLoading(false);
+                return;
+            }
+
+            // Fetch all creators concurrently
+            const fetchPromises = creators.map(creator => fetchGoogleSheetData(creator.url, creator.name));
+            const results = await Promise.all(fetchPromises);
+            
+            // Flatten the results into a single array
+            let combinedData = results.flat();
 
             // Check thresholds upon loading live data
-            liveData.forEach(account => {
+            combinedData.forEach(account => {
                 if (evaluateAccountThresholds(account)) {
                     if (account.status !== ACCOUNT_STATUSES.WINNER) {
                         account.status = ACCOUNT_STATUSES.WINNER;
@@ -34,13 +60,10 @@ const Dashboard = () => {
                 }
             });
 
-            setAccounts(liveData);
-            setIsConfiguring(false);
+            setAccounts(combinedData);
         } catch (error) {
             console.error("Failed to load Google Sheet data", error);
-            setFetchError("Failed to load data. Please ensure it is a valid public CSV link.");
-            // If it fails, fallback to rendering nothing or keep them in config mode
-            setIsConfiguring(true);
+            setFetchError("Failed to load data for one or more creators. Please check the links.");
         } finally {
             setIsLoading(false);
         }
@@ -48,17 +71,35 @@ const Dashboard = () => {
 
     // Initialize Data
     useEffect(() => {
-        if (!isConfiguring && sheetUrl) {
-            loadData(sheetUrl);
+        if (isAuthenticated) {
+            loadData();
         } else {
             setIsLoading(false);
         }
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, creators]);
 
-    const handleSaveUrl = () => {
-        if (sheetUrl.trim()) {
-            localStorage.setItem('igdash_sheet_url', sheetUrl.trim());
-            loadData(sheetUrl.trim());
+    const handlePinSubmit = (e) => {
+        e.preventDefault();
+        if (pinInput === '5555') {
+            localStorage.setItem('igdash_auth', 'true');
+            setIsAuthenticated(true);
+            setPinError('');
+        } else {
+            setPinError('Invalid PIN code');
+            setPinInput('');
+        }
+    };
+
+    const handleAddCreator = (e) => {
+        e.preventDefault();
+        if (newCreatorName && newCreatorLink) {
+            const updatedCreators = [...creators, { name: newCreatorName, url: newCreatorLink }];
+            setCreators(updatedCreators);
+            localStorage.setItem('igdash_creators', JSON.stringify(updatedCreators));
+            setIsAddingCreator(false);
+            setNewCreatorName('');
+            setNewCreatorLink('');
         }
     };
 
@@ -66,7 +107,6 @@ const Dashboard = () => {
         setIsLoading(true);
         setTimeout(() => {
             setAccounts(generateMockAccounts(50));
-            setIsConfiguring(false);
             setIsLoading(false);
             setFetchError('');
         }, 800);
@@ -131,39 +171,45 @@ const Dashboard = () => {
         );
     }
 
-    if (isConfiguring) {
+    if (!isAuthenticated) {
         return (
-            <div className="dashboard-container">
-                <div className="glass-panel" style={{ maxWidth: '600px', margin: '40px auto', padding: '30px', textAlign: 'center' }}>
-                    <div className="flex-center" style={{ marginBottom: '20px', color: 'var(--accent-primary)' }}>
-                        <Database size={48} />
+            <div className="dashboard-container flex-center" style={{ height: '100vh' }}>
+                <div className="glass-panel" style={{ maxWidth: '400px', width: '100%', padding: '40px', textAlign: 'center' }}>
+                    <div className="flex-center" style={{ marginBottom: '24px', color: 'var(--accent-primary)' }}>
+                        <Lock size={48} />
                     </div>
-                    <h2 style={{ marginBottom: '10px' }}>Connect Data Source</h2>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.6' }}>
-                        To power this dashboard, please provide a public Google Sheets CSV link.
-                        <br />(File &gt; Share &gt; Publish to web &gt; CSV)
+                    <h2 style={{ marginBottom: '8px' }}>Private Access</h2>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
+                        Please enter your PIN to continue
                     </p>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }}>
+                    <form onSubmit={handlePinSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <input
-                            type="text"
+                            type="password"
                             className="search-bar"
-                            style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
-                            placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
-                            value={sheetUrl}
-                            onChange={(e) => setSheetUrl(e.target.value)}
+                            style={{ 
+                                width: '100%', 
+                                padding: '16px', 
+                                borderRadius: '12px', 
+                                border: '1px solid rgba(255,255,255,0.1)', 
+                                background: 'rgba(0,0,0,0.2)', 
+                                color: 'white',
+                                textAlign: 'center',
+                                fontSize: '24px',
+                                letterSpacing: '8px'
+                            }}
+                            placeholder="••••"
+                            value={pinInput}
+                            onChange={(e) => setPinInput(e.target.value)}
+                            maxLength={4}
+                            autoFocus
                         />
-                        {fetchError && <p style={{ color: 'var(--alert-error)', fontSize: '14px', margin: 0 }}>{fetchError}</p>}
-
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px', width: '100%' }}>
-                            <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleSaveUrl}>
-                                <Save size={18} /> Connect Data
-                            </button>
-                            <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }} onClick={loadMockData}>
-                                Use Demo Data
-                            </button>
-                        </div>
-                    </div>
+                        {pinError && <p style={{ color: 'var(--alert-error)', fontSize: '14px', margin: 0 }}>{pinError}</p>}
+                        
+                        <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '16px' }}>
+                            Unlock Dashboard
+                        </button>
+                    </form>
                 </div>
             </div>
         );
@@ -178,10 +224,10 @@ const Dashboard = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-outline tooltip" data-tip="Change Data Source" onClick={() => setIsConfiguring(true)}>
-                        <LinkIcon size={16} />
+                    <button className="btn btn-outline tooltip" data-tip="Add Creator CSV" onClick={() => setIsAddingCreator(true)}>
+                        <Database size={16} /> Addition
                     </button>
-                    <button className="btn btn-primary" onClick={() => loadData(sheetUrl)}>
+                    <button className="btn btn-primary" onClick={() => loadData()}>
                         <TrendingUp size={16} />
                         Sync Now
                     </button>
@@ -275,6 +321,49 @@ const Dashboard = () => {
                     onStatusChange={handleStatusChange}
                 />
             </div>
+
+            {/* Add Creator Modal */}
+            {isAddingCreator && (
+                <div className="modal-overlay" onClick={() => setIsAddingCreator(false)}>
+                    <div className="glass-panel" style={{ maxWidth: '500px', width: '90%', padding: '30px' }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ marginBottom: '20px' }}>Add New Creator Source</h3>
+                        <form onSubmit={handleAddCreator} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>Creator Name</label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="search-bar"
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                                    placeholder="e.g. Bella"
+                                    value={newCreatorName}
+                                    onChange={(e) => setNewCreatorName(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>Public CSV Link</label>
+                                <input
+                                    type="url"
+                                    required
+                                    className="search-bar"
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                                    placeholder="https://docs.google.com/..."
+                                    value={newCreatorLink}
+                                    onChange={(e) => setNewCreatorLink(e.target.value)}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                <button type="button" className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setIsAddingCreator(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                                    Add Source
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
