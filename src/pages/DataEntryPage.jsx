@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, ChevronRight, Check, Save } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Check, Save, Upload } from 'lucide-react'
 import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGrade } from '../lib/metrics'
+import { logAudit } from '../lib/automation'
+import CSVImport from '../components/CSVImport'
 
 const HEALTH_OPTIONS = {
   instagram: ['Clean', 'Shadowbanned', 'Restricted', 'Action Blocked'],
@@ -198,6 +200,13 @@ export default function DataEntryPage() {
       }
 
       setSaved(true)
+      logAudit({
+        action: 'create_snapshot',
+        entity_type: 'snapshot',
+        entity_id: selectedAccount,
+        details: `Manual snapshot for @${currentAccount?.handle} on ${snapshotDate}`,
+        user_id: user?.id,
+      })
     } catch (err) {
       alert('Error saving: ' + err.message)
     } finally {
@@ -214,6 +223,8 @@ export default function DataEntryPage() {
     }
   }
 
+  const [entryMode, setEntryMode] = useState('manual') // manual | csv
+
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
   return (
@@ -223,7 +234,25 @@ export default function DataEntryPage() {
           <h1 className="text-gradient">Data Entry</h1>
           <p>Log daily/weekly metrics for accounts</p>
         </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className={`btn ${entryMode === 'manual' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('manual')}>
+            Manual Entry
+          </button>
+          <button className={`btn ${entryMode === 'csv' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('csv')}>
+            <Upload size={16} /> CSV Import
+          </button>
+        </div>
       </div>
+
+      {entryMode === 'csv' && (
+        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Bulk CSV Import</h3>
+          <CSVImport accounts={accounts} userId={user?.id} onComplete={() => {}} />
+        </div>
+      )}
+
+      {entryMode === 'manual' && (<>
+      {/* Rest of manual entry form */}
 
       {/* Account selector */}
       <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -467,6 +496,7 @@ export default function DataEntryPage() {
           </div>
         </>
       )}
+      </>)}
     </div>
   )
 }

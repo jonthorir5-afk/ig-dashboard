@@ -1,7 +1,7 @@
 import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Activity, Settings, Bell, UserCircle,
-  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList, BarChart3
+  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList, BarChart3, FileText
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginPage from './components/LoginPage'
@@ -14,6 +14,7 @@ import OperatorsPage from './pages/OperatorsPage'
 import DataEntryPage from './pages/DataEntryPage'
 import AlertsPage from './pages/AlertsPage'
 import BenchmarkPage from './pages/BenchmarkPage'
+import WeeklyDigestPage from './pages/WeeklyDigestPage'
 import './App.css'
 
 function NavItem({ to, icon: Icon, label, badge }) {
@@ -53,6 +54,7 @@ function AppShell() {
             <NavItem to="/operators" icon={UserCircle} label="Operators" />
             <NavItem to="/data-entry" icon={ClipboardList} label="Data Entry" />
             <NavItem to="/benchmark" icon={BarChart3} label="Benchmark" />
+            <NavItem to="/digest" icon={FileText} label="Weekly Digest" />
             <NavItem to="/alerts" icon={AlertTriangle} label="Alerts" />
           </nav>
 
@@ -87,6 +89,7 @@ function AppShell() {
               <Route path="/operators" element={<OperatorsPage />} />
               <Route path="/data-entry" element={<DataEntryPage />} />
               <Route path="/benchmark" element={<BenchmarkPage />} />
+              <Route path="/digest" element={<WeeklyDigestPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
