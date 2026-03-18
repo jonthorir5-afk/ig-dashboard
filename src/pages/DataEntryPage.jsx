@@ -23,6 +23,7 @@ export default function DataEntryPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [previousSnapshot, setPreviousSnapshot] = useState(null)
+  const [entryMode, setEntryMode] = useState('manual')
 
   // Snapshot form state
   const [snapshotDate, setSnapshotDate] = useState(new Date().toISOString().split('T')[0])
@@ -222,8 +223,6 @@ export default function DataEntryPage() {
       setSelectedAccount(filteredAccounts[currentIdx + 1].id)
     }
   }
-
-  const [entryMode, setEntryMode] = useState('manual') // manual | csv
 
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
