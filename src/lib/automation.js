@@ -1,10 +1,12 @@
 import { supabase } from './supabase'
+import { isDemoMode, mockTasks } from './mockData'
 
 /**
  * Log an action to the audit_log table.
  * Falls back silently if the table doesn't exist yet (client-side only).
  */
 export async function logAudit({ action, entity_type, entity_id, details, user_id }) {
+  if (isDemoMode()) return
   try {
     await supabase.from('audit_log').insert({
       action,
@@ -71,6 +73,13 @@ export function saveAlertRules(rules) {
  * Falls back to empty if table doesn't exist.
  */
 export async function getTasks(filters = {}) {
+  if (isDemoMode()) {
+    let tasks = [...mockTasks]
+    if (filters.assignee_id) tasks = tasks.filter(t => t.assignee_id === filters.assignee_id)
+    if (filters.status) tasks = tasks.filter(t => t.status === filters.status)
+    if (filters.account_id) tasks = tasks.filter(t => t.account_id === filters.account_id)
+    return tasks
+  }
   try {
     let query = supabase
       .from('tasks')
