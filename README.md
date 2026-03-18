@@ -66,15 +66,20 @@ The project includes an automated data pipeline using **Make.com** and **Apify**
 2. **Apify (Run an Actor):** The `apify/instagram-profile-scraper` actor is triggered to scrape the selected profile.
 3. **Google Sheets (Update a Row):** Make.com takes the fetched data (`followersCount`, etc.) from Apify and updates the exact row it originally searched.
 
-### ⚠️ Known Issue: "Total Views" Not Populating
-Currently, the "Total Views" metric is not correctly populating back into the Google Sheet. 
+### ✅ Resolved: "Total Views" Aggregation
 
-**Why it's happening:**
-The default Apify profile scraper (`apify/instagram-profile-scraper`) only fetches top-level profile data (like followers and bio) and an array of the most recent posts. It **does not** provide a single aggregated "Total Views" field for the entire account. Because that single data point doesn't exist in the raw Apify output, mapping it dynamically in the final Make.com step either fails or just maps to a single post's views.
+The "Total Views" metric is now populated via an Iterator + Numeric Aggregator pipeline in Make.com.
 
-**How to fix it:**
-To accurately capture "Total Views", the Make.com scenario needs to aggregate the views of the recent posts returned by Apify:
-1. Add an **Iterator** module in Make.com after the Apify module. Set it to iterate through the `latestPosts` array returned by Apify.
-2. Add a **Numeric Aggregator** module after the Iterator. Set it to calculate the `SUM` of the `videoViewCount` or `playCount` values from those iterated posts.
-3. In the final Google Sheets "Update a Row" module, map the total output of the Numeric Aggregator to the "Views" column.
-*(Alternatively, use a dedicated Apify Reels/TikTok scraper that provides pre-aggregated viewing stats if available).*
+**Make.com scenario flow:**
+```
+[Google Sheets: Search Rows] → [Apify: Run Actor] → [Apify: Get Dataset Items] → [Iterator] → [Numeric Aggregator] → [Google Sheets: Update Row]
+```
+
+**Configuration details:**
+1. **Apify: Run Actor** — Uses `apify/instagram-profile-scraper`. Input JSON maps the username dynamically from the Google Sheet (e.g., `{"usernames": ["{{1.username}}"]}`).
+2. **Apify: Get Dataset Items** — Dataset ID mapped to `defaultDatasetId` from the Run Actor output. Format: JSON, Transformation: Clean.
+3. **Iterator** (Flow Control) — Array set to `latestPosts[]` from Get Dataset Items output.
+4. **Numeric Aggregator** (Tools) — Source Module: Iterator. Aggregate function: SUM. Value: `{{ifempty(iterator.videoViewCount; 0)}}` (handles photo posts with no view count).
+5. **Google Sheets: Update Row** — Maps the Numeric Aggregator `result` to the "Total Views" column.
+
+**Known limitation:** Apify scrapes public Instagram data which may return slightly stale/cached view counts. Actual views on Instagram can be marginally higher than what the scraper reports. This is a limitation of all Instagram scrapers — for exact real-time metrics, the official Instagram Graph API would be required (needs Business/Creator accounts with Facebook Page connections).
