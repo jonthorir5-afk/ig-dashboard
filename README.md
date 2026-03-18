@@ -83,3 +83,20 @@ The "Total Views" metric is now populated via an Iterator + Numeric Aggregator p
 5. **Google Sheets: Update Row** — Maps the Numeric Aggregator `result` to the "Total Views" column.
 
 **Known limitation:** Apify scrapes public Instagram data which may return slightly stale/cached view counts. Actual views on Instagram can be marginally higher than what the scraper reports. This is a limitation of all Instagram scrapers — for exact real-time metrics, the official Instagram Graph API would be required (needs Business/Creator accounts with Facebook Page connections).
+### ⚠️ Fixing "Total Views" Using the Post Scraper
+The generic Apify profile scraper often fails to pull accurate video views due to Instagram's grid layout and public cache lag. 
+
+To accurately capture video views, the Make.com scenario was updated to use the **`apify/instagram-post-scraper`** actor instead.
+
+**Actor Setup:**
+1. Switch the Apify Actor ID to `apify/instagram-post-scraper`.
+2. Update the Input JSON to format correctly for this specific actor (it requires `username` instead of `directUrls`):
+   ```json
+   {
+     "username": ["{{1.Username}}"],
+     "resultsLimit": 10
+   }
+   ```
+3. Add an **Iterator** module after the Apify module to iterate through the newly returned `items[]` array.
+4. Add a **Numeric Aggregator** module (set to `SUM`) to sum up the `videoViewCount` metric from the iterated items.
+5. In the final Google Sheets module, map the total `Result` from the Numeric Aggregator into the "Total Views" column.
