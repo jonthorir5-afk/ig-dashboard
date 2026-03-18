@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
-import { getAccounts, getLatestSnapshots } from '../lib/api'
+import { getAccounts, getLatestSnapshots, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
+import Sparkline from '../components/charts/Sparkline'
+import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
 const PLATFORM_LABELS = { instagram: 'Instagram', twitter: 'Twitter / X', reddit: 'Reddit', tiktok: 'TikTok' }
 
@@ -10,6 +12,7 @@ export default function PlatformPage() {
   const { platform } = useParams()
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
+  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('followers')
@@ -21,8 +24,8 @@ export default function PlatformPage() {
   }, [platform])
 
   useEffect(() => {
-    Promise.all([getAccounts(), getLatestSnapshots()])
-      .then(([accs, snaps]) => { setAccounts(accs); setSnapshots(snaps) })
+    Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60)])
+      .then(([accs, snaps, hist]) => { setAccounts(accs); setSnapshots(snaps); setHistory(hist) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -56,6 +59,33 @@ export default function PlatformPage() {
   }
 
   const SortIcon = ({ k }) => sortKey === k ? (sortDir === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />) : null
+
+  // Sparkline data per account from history
+  const sparklines = useMemo(() => {
+    const byAccount = {}
+    for (const s of history) {
+      if (!byAccount[s.account_id]) byAccount[s.account_id] = []
+      byAccount[s.account_id].push(s)
+    }
+    const result = {}
+    for (const [aid, snaps] of Object.entries(byAccount)) {
+      const sorted = snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+      result[aid] = sorted.map(s => s.followers || 0)
+    }
+    return result
+  }, [history])
+
+  // Daily aggregate trend for this platform
+  const dailyTrend = useMemo(() => {
+    const dateMap = {}
+    for (const s of history) {
+      if (selectedPlatform && s.account?.platform !== selectedPlatform) continue
+      if (!dateMap[s.snapshot_date]) dateMap[s.snapshot_date] = { date: s.snapshot_date, views: 0, followers: 0 }
+      dateMap[s.snapshot_date].views += getSnapshotViews(s)
+      dateMap[s.snapshot_date].followers += s.followers || 0
+    }
+    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+  }, [history, selectedPlatform])
 
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
@@ -94,10 +124,27 @@ export default function PlatformPage() {
         <input type="text" placeholder="Search by handle or model..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
+      {/* Trend Chart */}
+      {dailyTrend.length > 1 && (
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+            {selectedPlatform ? PLATFORM_LABELS[selectedPlatform] : 'All Platforms'} — Views & Followers Over Time
+          </h3>
+          <TrendChart
+            data={dailyTrend}
+            lines={[
+              { key: 'views', label: 'Views', color: COLORS.primary },
+              { key: 'followers', label: 'Followers', color: COLORS.success },
+            ]}
+            height={240}
+          />
+        </div>
+      )}
+
       {/* Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className="accounts-table" style={{ minWidth: '800px' }}>
+          <table className="accounts-table" style={{ minWidth: '900px' }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -106,6 +153,7 @@ export default function PlatformPage() {
                 {!selectedPlatform && <th>Platform</th>}
                 <th>Health</th>
                 <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>
+                <th style={{ textAlign: 'center' }}>Trend</th>
                 <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d <SortIcon k="clicks" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>
@@ -127,6 +175,7 @@ export default function PlatformPage() {
                       </span>
                     </td>
                     <td className="numeric font-semibold">{formatNumber(a._followers)}</td>
+                    <td style={{ textAlign: 'center' }}><Sparkline data={sparklines[a.id] || []} /></td>
                     <td className="numeric font-semibold">{formatNumber(a._views)}</td>
                     <td className="numeric">{formatNumber(a._clicks)}</td>
                     <td className="numeric">{a._vtfr ? a._vtfr.toFixed(1) + '%' : '—'}</td>
@@ -135,7 +184,7 @@ export default function PlatformPage() {
                 )
               })}
               {merged.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts found.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts found.</td></tr>
               )}
             </tbody>
           </table>

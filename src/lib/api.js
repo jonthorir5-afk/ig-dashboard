@@ -190,6 +190,44 @@ export async function getProfiles() {
 }
 
 // ============================================================
+// ANALYTICS — Snapshot history for trend charts
+// ============================================================
+export async function getSnapshotHistory(accountIds, days = 90) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('snapshots')
+    .select('*, account:accounts(id, platform, handle, model_id, model:models(id, name))')
+    .in('account_id', accountIds)
+    .gte('snapshot_date', since)
+    .order('snapshot_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function getAllSnapshotHistory(days = 90) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('snapshots')
+    .select('*, account:accounts(id, platform, handle, model_id, model:models(id, name))')
+    .gte('snapshot_date', since)
+    .order('snapshot_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function getPostsForAccounts(accountIds, days = 90) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, snapshot:snapshots(id, snapshot_date, account_id)')
+    .in('account_id', accountIds)
+    .gte('created_at', since)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+// ============================================================
 // EXECUTIVE OVERVIEW QUERIES
 // ============================================================
 export async function getExecOverview() {

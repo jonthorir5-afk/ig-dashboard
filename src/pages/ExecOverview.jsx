@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download } from 'lucide-react'
-import { getExecOverview } from '../lib/api'
+import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download, BarChart3 } from 'lucide-react'
+import { getExecOverview, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
+import { TrendChart, COLORS } from '../components/charts/TrendChart'
+import BarChartComponent from '../components/charts/BarChart'
 
 export default function ExecOverview() {
   const [data, setData] = useState(null)
+  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    getExecOverview()
-      .then(setData)
+    Promise.all([getExecOverview(), getAllSnapshotHistory(30)])
+      .then(([d, h]) => { setData(d); setHistory(h) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -93,9 +96,29 @@ export default function ExecOverview() {
       bottomModels: modelRanking.slice(-3).reverse(),
       flagged,
       missingData,
-      latestSnapshots: latestArr
+      latestSnapshots: latestArr,
+      modelRanking,
     }
   }, [data])
+
+  // Daily aggregate trend from snapshot history
+  const dailyTrend = useMemo(() => {
+    if (!history.length) return []
+    const dateMap = {}
+    for (const s of history) {
+      if (!dateMap[s.snapshot_date]) dateMap[s.snapshot_date] = { date: s.snapshot_date, followers: 0, views: 0, clicks: 0 }
+      dateMap[s.snapshot_date].followers += s.followers || 0
+      dateMap[s.snapshot_date].views += getSnapshotViews(s)
+      dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
+    }
+    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+  }, [history])
+
+  // Model bar chart data
+  const modelBarData = useMemo(() => {
+    if (!stats?.modelRanking) return []
+    return stats.modelRanking.map(m => ({ name: m.name, views: m.reach }))
+  }, [stats])
 
   if (loading) {
     return (
@@ -201,6 +224,46 @@ export default function ExecOverview() {
           </Link>
         ))}
       </div>
+
+      {/* Trend Charts */}
+      {dailyTrend.length > 1 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div className="glass-panel" style={{ padding: '1.25rem' }}>
+            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Network Views & Clicks (30d)</h3>
+            <TrendChart
+              data={dailyTrend}
+              lines={[
+                { key: 'views', label: 'Views', color: COLORS.primary },
+                { key: 'clicks', label: 'Clicks', color: COLORS.warning },
+              ]}
+              height={240}
+            />
+          </div>
+          <div className="glass-panel" style={{ padding: '1.25rem' }}>
+            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Total Followers (30d)</h3>
+            <TrendChart
+              data={dailyTrend}
+              lines={[{ key: 'followers', label: 'Followers', color: COLORS.success }]}
+              height={240}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Model Reach Comparison */}
+      {modelBarData.length > 0 && (
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BarChart3 size={18} color="var(--accent-primary)" /> Model Reach Comparison (7d)
+          </h3>
+          <BarChartComponent
+            data={modelBarData}
+            bars={[{ key: 'views', label: 'Views', color: COLORS.primary }]}
+            layout="horizontal"
+            height={Math.max(200, modelBarData.length * 40)}
+          />
+        </div>
+      )}
 
       {/* Top & Bottom Models + Flagged */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>

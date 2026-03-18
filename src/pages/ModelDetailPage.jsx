@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Globe, ChevronRight } from 'lucide-react'
-import { getModel, getAccounts } from '../lib/api'
-import { supabase } from '../lib/supabase'
-import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor } from '../lib/metrics'
+import { ArrowLeft, Plus, Globe } from 'lucide-react'
+import { getModel, getAccounts, getSnapshotHistory } from '../lib/api'
+import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade } from '../lib/metrics'
+import { TrendChart, AreaTrendChart, COLORS } from '../components/charts/TrendChart'
+import Sparkline from '../components/charts/Sparkline'
+import HeatmapGrid, { vtfrColorScale, viewsColorScale } from '../components/charts/HeatmapGrid'
 
 export default function ModelDetailPage() {
   const { id } = useParams()
@@ -16,54 +18,108 @@ export default function ModelDetailPage() {
     Promise.all([
       getModel(id),
       getAccounts({ model_id: id }),
-      supabase
-        .from('snapshots')
-        .select('*, account:accounts(id, platform, handle)')
-        .in('account_id', []) // will be replaced after accounts load
-        .order('snapshot_date', { ascending: false })
-        .limit(200)
     ]).then(([m, accs]) => {
       setModel(m)
       setAccounts(accs)
-
-      // Now fetch snapshots for these accounts
       if (accs.length > 0) {
-        const accountIds = accs.map(a => a.id)
-        supabase
-          .from('snapshots')
-          .select('*, account:accounts(id, platform, handle)')
-          .in('account_id', accountIds)
-          .order('snapshot_date', { ascending: false })
-          .limit(200)
-          .then(({ data }) => setSnapshots(data || []))
+        getSnapshotHistory(accs.map(a => a.id), 90)
+          .then(data => setSnapshots(data || []))
       }
     }).finally(() => setLoading(false))
   }, [id])
 
-  if (loading) {
-    return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
-  }
-
-  if (!model) {
-    return <div className="flex-center" style={{ height: '60vh' }}><p style={{ color: 'var(--text-tertiary)' }}>Model not found</p></div>
-  }
-
   // Aggregate stats
-  const latestByAccount = {}
-  for (const s of snapshots) {
-    if (!latestByAccount[s.account_id] || s.snapshot_date > latestByAccount[s.account_id].snapshot_date) {
-      latestByAccount[s.account_id] = s
+  const latestByAccount = useMemo(() => {
+    const map = {}
+    for (const s of snapshots) {
+      if (!map[s.account_id] || s.snapshot_date > map[s.account_id].snapshot_date) {
+        map[s.account_id] = s
+      }
     }
-  }
+    return map
+  }, [snapshots])
+
   const latestArr = Object.values(latestByAccount)
   const totalReach = latestArr.reduce((sum, s) => sum + getSnapshotViews(s), 0)
   const totalClicks = latestArr.reduce((sum, s) => sum + getSnapshotClicks(s), 0)
-
-  // Content volume (sum of posts across platforms)
   const totalPosts = latestArr.reduce((sum, s) => {
     return sum + (s.ig_reels_posted_7d || 0) + (s.ig_stories_posted_7d || 0)
       + (s.tw_tweets_posted_7d || 0) + (s.rd_posts_7d || 0) + (s.tt_videos_posted_7d || 0)
   }, 0)
+
+  // Build trend chart data: aggregate by date
+  const trendData = useMemo(() => {
+    const dateMap = {}
+    for (const s of snapshots) {
+      if (!dateMap[s.snapshot_date]) {
+        dateMap[s.snapshot_date] = { date: s.snapshot_date, followers: 0, views: 0, clicks: 0 }
+      }
+      dateMap[s.snapshot_date].followers += s.followers || 0
+      dateMap[s.snapshot_date].views += getSnapshotViews(s)
+      dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
+    }
+    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+  }, [snapshots])
+
+  // Per-account sparkline data
+  const accountSparklines = useMemo(() => {
+    const byAccount = {}
+    for (const s of snapshots) {
+      if (!byAccount[s.account_id]) byAccount[s.account_id] = []
+      byAccount[s.account_id].push(s)
+    }
+    const result = {}
+    for (const [aid, snaps] of Object.entries(byAccount)) {
+      const sorted = snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+      result[aid] = {
+        followers: sorted.map(s => s.followers || 0),
+        views: sorted.map(s => getSnapshotViews(s)),
+        vtfr: sorted.map(s => s.vtfr_weekly || 0),
+      }
+    }
+    return result
+  }, [snapshots])
+
+  // Weekly heatmap: accounts × weeks
+  const weeklyHeatmap = useMemo(() => {
+    if (!snapshots.length) return { rows: [], columns: [] }
+
+    const weekSet = new Set()
+    for (const s of snapshots) {
+      const d = new Date(s.snapshot_date)
+      const weekStart = new Date(d)
+      weekStart.setDate(d.getDate() - d.getDay())
+      weekSet.add(weekStart.toISOString().split('T')[0])
+    }
+    const weeks = Array.from(weekSet).sort()
+    const columns = weeks.map(w => {
+      const d = new Date(w)
+      return `${d.getMonth() + 1}/${d.getDate()}`
+    })
+
+    const accountWeekViews = {}
+    for (const s of snapshots) {
+      const handle = s.account?.handle || s.account_id
+      const d = new Date(s.snapshot_date)
+      const weekStart = new Date(d)
+      weekStart.setDate(d.getDate() - d.getDay())
+      const weekKey = weekStart.toISOString().split('T')[0]
+
+      if (!accountWeekViews[handle]) accountWeekViews[handle] = {}
+      if (!accountWeekViews[handle][weekKey]) accountWeekViews[handle][weekKey] = 0
+      accountWeekViews[handle][weekKey] += getSnapshotViews(s)
+    }
+
+    const rows = Object.entries(accountWeekViews).map(([label, weekData]) => ({
+      label: `@${label}`,
+      cells: weeks.map(w => ({ value: weekData[w] || null }))
+    }))
+
+    return { rows, columns }
+  }, [snapshots])
+
+  if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
+  if (!model) return <div className="flex-center" style={{ height: '60vh' }}><p style={{ color: 'var(--text-tertiary)' }}>Model not found</p></div>
 
   return (
     <div className="dashboard-container">
@@ -109,12 +165,47 @@ export default function ModelDetailPage() {
         </div>
       </div>
 
-      {/* Account cards */}
+      {/* Trend Charts */}
+      {trendData.length > 1 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div className="glass-panel" style={{ padding: '1.25rem' }}>
+            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Follower Growth</h3>
+            <AreaTrendChart data={trendData} dataKey="followers" label="Followers" color={COLORS.success} height={220} />
+          </div>
+          <div className="glass-panel" style={{ padding: '1.25rem' }}>
+            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Views & Clicks</h3>
+            <TrendChart
+              data={trendData}
+              lines={[
+                { key: 'views', label: 'Views', color: COLORS.primary },
+                { key: 'clicks', label: 'Clicks', color: COLORS.warning },
+              ]}
+              height={220}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Weekly heatmap */}
+      {weeklyHeatmap.rows.length > 0 && (
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <HeatmapGrid
+            title="Weekly Views by Account"
+            rows={weeklyHeatmap.rows}
+            columns={weeklyHeatmap.columns}
+            colorScale={viewsColorScale}
+            valueFormatter={formatNumber}
+          />
+        </div>
+      )}
+
+      {/* Account cards with sparklines */}
       <h2 style={{ marginTop: '0.5rem' }}>Accounts</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
         {accounts.map(account => {
           const hc = healthColor(account.health)
           const snap = latestByAccount[account.id]
+          const spark = accountSparklines[account.id]
           return (
             <div key={account.id} className="glass-panel" style={{ padding: '1.25rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
@@ -126,12 +217,8 @@ export default function ModelDetailPage() {
                   {account.health}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                <span>Type: {account.account_type}</span>
-                <span>Status: {account.status}</span>
-              </div>
               {snap && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div>
                     <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Followers</p>
                     <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{formatNumber(snap.followers)}</p>
@@ -141,18 +228,31 @@ export default function ModelDetailPage() {
                     <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{formatNumber(getSnapshotViews(snap))}</p>
                   </div>
                   <div>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Clicks 7d</p>
-                    <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{formatNumber(getSnapshotClicks(snap))}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>VTFR</p>
+                    <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                      {snap.vtfr_weekly ? snap.vtfr_weekly.toFixed(1) + '%' : '—'}
+                    </p>
                   </div>
                 </div>
               )}
-              {!snap && (
-                <p style={{ marginTop: '0.75rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>No snapshot data yet</p>
+              {spark && (
+                <div style={{ display: 'flex', gap: '1.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginBottom: '2px' }}>Followers</p>
+                    <Sparkline data={spark.followers} width={70} height={24} />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginBottom: '2px' }}>Views</p>
+                    <Sparkline data={spark.views} width={70} height={24} color="#f59e0b" />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginBottom: '2px' }}>VTFR</p>
+                    <Sparkline data={spark.vtfr} width={70} height={24} color="#6366f1" />
+                  </div>
+                </div>
               )}
-              {account.operator && (
-                <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                  Operator: {account.operator.display_name}
-                </p>
+              {!snap && !spark && (
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>No snapshot data yet</p>
               )}
             </div>
           )
