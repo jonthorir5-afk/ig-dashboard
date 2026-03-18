@@ -33,19 +33,27 @@ export function AuthProvider({ children }) {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
       setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
-        setProfile(null)
-      }
+    }).catch(() => {
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    let subscription
+    try {
+      const result = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+        }
+        setLoading(false)
+      })
+      subscription = result.data.subscription
+    } catch {
+      setLoading(false)
+    }
+
+    return () => subscription?.unsubscribe()
   }, [])
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password })
