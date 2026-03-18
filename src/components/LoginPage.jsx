@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Lock, Mail, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react'
 
 export default function LoginPage() {
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, enterDemoMode } = useAuth()
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -130,7 +130,26 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+            <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>or</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+          </div>
+
+          <button
+            onClick={enterDemoMode}
+            className="btn"
+            style={{
+              width: '100%', justifyContent: 'center', padding: '12px',
+              fontSize: '0.875rem', background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+              cursor: 'pointer', borderRadius: '8px', marginBottom: '16px'
+            }}
+          >
+            Try Demo with Sample Data
+          </button>
+
           <button
             onClick={() => { setIsSignUp(!isSignUp); setError(''); setSuccess('') }}
             style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.8rem' }}

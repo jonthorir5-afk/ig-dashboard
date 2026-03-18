@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { isDemoMode, enableDemoMode, disableDemoMode, mockDemoUser, mockDemoProfile } from '../lib/mockData'
 
 const AuthContext = createContext({})
 
@@ -20,6 +21,14 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // If demo mode is active, skip Supabase auth
+    if (isDemoMode()) {
+      setUser(mockDemoUser)
+      setProfile(mockDemoProfile)
+      setLoading(false)
+      return
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
@@ -44,7 +53,21 @@ export function AuthProvider({ children }) {
   const signUp = (email, password, metadata = {}) =>
     supabase.auth.signUp({ email, password, options: { data: metadata } })
 
-  const signOut = () => supabase.auth.signOut()
+  const enterDemoMode = () => {
+    enableDemoMode()
+    setUser(mockDemoUser)
+    setProfile(mockDemoProfile)
+  }
+
+  const signOut = () => {
+    if (isDemoMode()) {
+      disableDemoMode()
+      setUser(null)
+      setProfile(null)
+      return
+    }
+    return supabase.auth.signOut()
+  }
 
   const isAdmin = profile?.role === 'admin'
   const isManager = profile?.role === 'manager'
@@ -53,7 +76,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
-      signIn, signUp, signOut,
+      signIn, signUp, signOut, enterDemoMode,
       isAdmin, isManager, canManage
     }}>
       {children}

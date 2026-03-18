@@ -1,9 +1,11 @@
 import { supabase } from './supabase'
+import { isDemoMode, mockModels, mockAccounts, mockSnapshots, mockProfiles } from './mockData'
 
 // ============================================================
 // MODELS
 // ============================================================
 export async function getModels() {
+  if (isDemoMode()) return [...mockModels].sort((a, b) => a.name.localeCompare(b.name))
   const { data, error } = await supabase
     .from('models')
     .select('*')
@@ -13,6 +15,11 @@ export async function getModels() {
 }
 
 export async function getModel(id) {
+  if (isDemoMode()) {
+    const m = mockModels.find(m => m.id === id)
+    if (!m) throw new Error('Not found')
+    return { ...m, accounts: mockAccounts.filter(a => a.model_id === id) }
+  }
   const { data, error } = await supabase
     .from('models')
     .select('*, accounts(*)')
@@ -23,6 +30,7 @@ export async function getModel(id) {
 }
 
 export async function createModel(model) {
+  if (isDemoMode()) return { id: crypto.randomUUID(), ...model, created_at: new Date().toISOString() }
   const { data, error } = await supabase
     .from('models')
     .insert(model)
@@ -33,6 +41,7 @@ export async function createModel(model) {
 }
 
 export async function updateModel(id, updates) {
+  if (isDemoMode()) return { ...mockModels.find(m => m.id === id), ...updates }
   const { data, error } = await supabase
     .from('models')
     .update(updates)
@@ -44,6 +53,7 @@ export async function updateModel(id, updates) {
 }
 
 export async function deleteModel(id) {
+  if (isDemoMode()) return
   const { error } = await supabase.from('models').delete().eq('id', id)
   if (error) throw error
 }
@@ -52,6 +62,14 @@ export async function deleteModel(id) {
 // ACCOUNTS
 // ============================================================
 export async function getAccounts(filters = {}) {
+  if (isDemoMode()) {
+    let accs = [...mockAccounts]
+    if (filters.model_id) accs = accs.filter(a => a.model_id === filters.model_id)
+    if (filters.platform) accs = accs.filter(a => a.platform === filters.platform)
+    if (filters.status) accs = accs.filter(a => a.status === filters.status)
+    if (filters.assigned_operator) accs = accs.filter(a => a.assigned_operator === filters.assigned_operator)
+    return accs
+  }
   let query = supabase
     .from('accounts')
     .select('*, model:models(id, name, display_name), operator:profiles(id, display_name)')
@@ -68,6 +86,11 @@ export async function getAccounts(filters = {}) {
 }
 
 export async function getAccount(id) {
+  if (isDemoMode()) {
+    const a = mockAccounts.find(a => a.id === id)
+    if (!a) throw new Error('Not found')
+    return a
+  }
   const { data, error } = await supabase
     .from('accounts')
     .select('*, model:models(id, name, display_name), operator:profiles(id, display_name)')
@@ -78,6 +101,7 @@ export async function getAccount(id) {
 }
 
 export async function createAccount(account) {
+  if (isDemoMode()) return { id: crypto.randomUUID(), ...account, created_at: new Date().toISOString() }
   const { data, error } = await supabase
     .from('accounts')
     .insert(account)
@@ -88,6 +112,7 @@ export async function createAccount(account) {
 }
 
 export async function updateAccount(id, updates) {
+  if (isDemoMode()) return { ...mockAccounts.find(a => a.id === id), ...updates }
   const { data, error } = await supabase
     .from('accounts')
     .update(updates)
@@ -99,6 +124,7 @@ export async function updateAccount(id, updates) {
 }
 
 export async function deleteAccount(id) {
+  if (isDemoMode()) return
   const { error } = await supabase.from('accounts').delete().eq('id', id)
   if (error) throw error
 }
@@ -107,6 +133,12 @@ export async function deleteAccount(id) {
 // SNAPSHOTS
 // ============================================================
 export async function getSnapshots(accountId, limit = 30) {
+  if (isDemoMode()) {
+    return mockSnapshots
+      .filter(s => s.account_id === accountId)
+      .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
+      .slice(0, limit)
+  }
   const { data, error } = await supabase
     .from('snapshots')
     .select('*')
@@ -118,6 +150,15 @@ export async function getSnapshots(accountId, limit = 30) {
 }
 
 export async function getLatestSnapshots() {
+  if (isDemoMode()) {
+    const sorted = [...mockSnapshots].sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
+    const seen = new Set()
+    return sorted.filter(s => {
+      if (seen.has(s.account_id)) return false
+      seen.add(s.account_id)
+      return true
+    })
+  }
   // Get the most recent snapshot for each account
   const { data, error } = await supabase
     .from('snapshots')
@@ -135,6 +176,7 @@ export async function getLatestSnapshots() {
 }
 
 export async function createSnapshot(snapshot) {
+  if (isDemoMode()) return { id: crypto.randomUUID(), ...snapshot, created_at: new Date().toISOString() }
   const { data, error } = await supabase
     .from('snapshots')
     .insert(snapshot)
@@ -145,6 +187,7 @@ export async function createSnapshot(snapshot) {
 }
 
 export async function updateSnapshot(id, updates) {
+  if (isDemoMode()) return { id, ...updates }
   const { data, error } = await supabase
     .from('snapshots')
     .update(updates)
@@ -159,6 +202,7 @@ export async function updateSnapshot(id, updates) {
 // POSTS (for per-post VTFR / ER calculations)
 // ============================================================
 export async function getPostsBySnapshot(snapshotId) {
+  if (isDemoMode()) return []
   const { data, error } = await supabase
     .from('posts')
     .select('*')
@@ -169,6 +213,7 @@ export async function getPostsBySnapshot(snapshotId) {
 }
 
 export async function createPosts(posts) {
+  if (isDemoMode()) return posts.map(p => ({ id: crypto.randomUUID(), ...p }))
   const { data, error } = await supabase
     .from('posts')
     .insert(posts)
@@ -181,6 +226,7 @@ export async function createPosts(posts) {
 // PROFILES / OPERATORS
 // ============================================================
 export async function getProfiles() {
+  if (isDemoMode()) return [...mockProfiles].sort((a, b) => a.display_name.localeCompare(b.display_name))
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
@@ -193,6 +239,12 @@ export async function getProfiles() {
 // ANALYTICS — Snapshot history for trend charts
 // ============================================================
 export async function getSnapshotHistory(accountIds, days = 90) {
+  if (isDemoMode()) {
+    const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+    return mockSnapshots
+      .filter(s => accountIds.includes(s.account_id) && s.snapshot_date >= since)
+      .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+  }
   const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
   const { data, error } = await supabase
     .from('snapshots')
@@ -205,6 +257,12 @@ export async function getSnapshotHistory(accountIds, days = 90) {
 }
 
 export async function getAllSnapshotHistory(days = 90) {
+  if (isDemoMode()) {
+    const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+    return mockSnapshots
+      .filter(s => s.snapshot_date >= since)
+      .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+  }
   const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
   const { data, error } = await supabase
     .from('snapshots')
@@ -216,6 +274,7 @@ export async function getAllSnapshotHistory(days = 90) {
 }
 
 export async function getPostsForAccounts(accountIds, days = 90) {
+  if (isDemoMode()) return []
   const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
   const { data, error } = await supabase
     .from('posts')
@@ -231,6 +290,16 @@ export async function getPostsForAccounts(accountIds, days = 90) {
 // EXECUTIVE OVERVIEW QUERIES
 // ============================================================
 export async function getExecOverview() {
+  if (isDemoMode()) {
+    const since = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
+    return {
+      models: mockModels.filter(m => m.status === 'Active'),
+      accounts: mockAccounts,
+      snapshots: mockSnapshots
+        .filter(s => s.snapshot_date >= since)
+        .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date)),
+    }
+  }
   const [modelsRes, accountsRes, snapshotsRes] = await Promise.all([
     supabase.from('models').select('*').eq('status', 'Active'),
     supabase.from('accounts').select('*, model:models(id, name)'),
