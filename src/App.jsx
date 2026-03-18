@@ -1,14 +1,41 @@
-import { useState } from 'react'
-import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom'
-import { LayoutDashboard, Users, Activity, Settings, Bell } from 'lucide-react'
-import Dashboard from './components/Dashboard'
+import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import {
+  LayoutDashboard, Users, Activity, Settings, Bell, UserCircle,
+  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList
+} from 'lucide-react'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import LoginPage from './components/LoginPage'
+import ExecOverview from './pages/ExecOverview'
+import ModelsPage from './pages/ModelsPage'
+import ModelDetailPage from './pages/ModelDetailPage'
+import AccountsPage from './pages/AccountsPage'
+import PlatformPage from './pages/PlatformPage'
+import OperatorsPage from './pages/OperatorsPage'
+import DataEntryPage from './pages/DataEntryPage'
+import AlertsPage from './pages/AlertsPage'
 import './App.css'
 
-function App() {
+function NavItem({ to, icon: Icon, label, badge }) {
+  const location = useLocation()
+  const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
+
+  return (
+    <Link to={to} className={`nav-item ${isActive ? 'active' : ''}`}>
+      <Icon size={20} />
+      <span>{label}</span>
+      {badge && <span className="badge badge-primary">{badge}</span>}
+    </Link>
+  )
+}
+
+function AppShell() {
+  const { user, profile, signOut } = useAuth()
+
+  if (!user) return <LoginPage />
+
   return (
     <Router>
       <div className="app-container">
-        {/* Sidebar Navigation */}
         <aside className="sidebar glass-panel">
           <div className="sidebar-header">
             <div className="logo-icon flex-center">
@@ -18,56 +45,47 @@ function App() {
           </div>
 
           <nav className="sidebar-nav">
-            <Link to="/" className="nav-item active">
-              <LayoutDashboard size={20} />
-              <span>Dashboard</span>
-            </Link>
-            <Link to="/accounts" className="nav-item">
-              <Users size={20} />
-              <span>Accounts</span>
-              <span className="badge badge-primary">124</span>
-            </Link>
-            <Link to="/alerts" className="nav-item">
-              <Bell size={20} />
-              <span>Alert History</span>
-            </Link>
-            <Link to="/settings" className="nav-item">
-              <Settings size={20} />
-              <span>Settings</span>
-            </Link>
+            <NavItem to="/" icon={LayoutDashboard} label="Overview" />
+            <NavItem to="/models" icon={Users} label="Models" />
+            <NavItem to="/accounts" icon={Globe} label="Accounts" />
+            <NavItem to="/platforms" icon={Activity} label="Platforms" />
+            <NavItem to="/operators" icon={UserCircle} label="Operators" />
+            <NavItem to="/data-entry" icon={ClipboardList} label="Data Entry" />
+            <NavItem to="/alerts" icon={AlertTriangle} label="Alerts" />
           </nav>
 
           <div className="sidebar-footer">
             <div className="user-profile">
-              <div className="avatar">A</div>
+              <div className="avatar">{(profile?.display_name || 'U').charAt(0).toUpperCase()}</div>
               <div className="user-info">
-                <h4>System Admin</h4>
-                <p>Scaling Ops</p>
+                <h4>{profile?.display_name || 'User'}</h4>
+                <p style={{ textTransform: 'capitalize' }}>{profile?.role || 'operator'}</p>
               </div>
+              <button
+                className="icon-btn"
+                onClick={signOut}
+                title="Sign out"
+                style={{ marginLeft: 'auto' }}
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           </div>
         </aside>
 
-        {/* Main Content Area */}
         <main className="main-content">
-          <header className="topbar">
-            <div className="topbar-search">
-              {/* Optional global search */}
-            </div>
-            <div className="topbar-actions">
-              <button className="icon-btn">
-                <Bell size={20} />
-                <span className="notification-dot"></span>
-              </button>
-            </div>
-          </header>
-
           <div className="page-content animate-fade-in">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/accounts" element={<div className="placeholder-page"><h2>Accounts View</h2><p>Detailed accounts management coming soon.</p></div>} />
-              <Route path="/alerts" element={<div className="placeholder-page"><h2>Alert History</h2><p>Telegram alert logs coming soon.</p></div>} />
-              <Route path="/settings" element={<div className="placeholder-page"><h2>Settings View</h2><p>Threshold configuration coming soon.</p></div>} />
+              <Route path="/" element={<ExecOverview />} />
+              <Route path="/models" element={<ModelsPage />} />
+              <Route path="/models/:id" element={<ModelDetailPage />} />
+              <Route path="/accounts" element={<AccountsPage />} />
+              <Route path="/platforms" element={<PlatformPage />} />
+              <Route path="/platforms/:platform" element={<PlatformPage />} />
+              <Route path="/operators" element={<OperatorsPage />} />
+              <Route path="/data-entry" element={<DataEntryPage />} />
+              <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>
         </main>
@@ -76,4 +94,10 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  )
+}
