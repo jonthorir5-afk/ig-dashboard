@@ -138,6 +138,16 @@ const accountDefs = [
   // GIA — 2 X accounts
   { id: uuid(220), model_id: uuid(22), platform: 'twitter', handle: 'Tsbbydollx', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
   { id: uuid(221), model_id: uuid(22), platform: 'twitter', handle: 'tsbbygf', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // ── Reddit accounts ──
+  // MOXIE
+  { id: uuid(230), model_id: uuid(15), platform: 'reddit', handle: 'u/Moxied0ll', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  // MAPLE (Katie)
+  { id: uuid(231), model_id: uuid(17), platform: 'reddit', handle: 'u/LittleMapleBerry', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  // LOLA
+  { id: uuid(232), model_id: uuid(16), platform: 'reddit', handle: 'u/jungeedosaty', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  // ROSE
+  { id: uuid(233), model_id: uuid(11), platform: 'reddit', handle: 'u/porcelaingoirl', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
 ]
 
 function getModelForAccount(acc) {
@@ -197,16 +207,28 @@ function generateSnapshots() {
         },
       }
 
-      // All accounts are Twitter/X for now
-      snap.tw_impressions_7d = randBetween(10000, 200000)
-      snap.tw_views_7d = randBetween(8000, 150000)
-      snap.tw_retweets_7d = randBetween(50, 800)
-      snap.tw_likes_7d = randBetween(200, 3000)
-      snap.tw_replies_7d = randBetween(30, 500)
-      snap.tw_link_clicks_7d = randBetween(10, 300)
-      snap.tw_tweets_posted_7d = randBetween(5, 30)
-      snap.tw_dms_sent_7d = randBetween(10, 100)
-      snap.tw_dm_response_rate = parseFloat((rand() * 60 + 30).toFixed(1))
+      // Platform-specific metrics
+      if (acc.platform === 'twitter') {
+        snap.tw_impressions_7d = randBetween(10000, 200000)
+        snap.tw_views_7d = randBetween(8000, 150000)
+        snap.tw_retweets_7d = randBetween(50, 800)
+        snap.tw_likes_7d = randBetween(200, 3000)
+        snap.tw_replies_7d = randBetween(30, 500)
+        snap.tw_link_clicks_7d = randBetween(10, 300)
+        snap.tw_tweets_posted_7d = randBetween(5, 30)
+        snap.tw_dms_sent_7d = randBetween(10, 100)
+        snap.tw_dm_response_rate = parseFloat((rand() * 60 + 30).toFixed(1))
+      } else if (acc.platform === 'reddit') {
+        snap.rd_karma_total = randBetween(500, 25000)
+        snap.rd_posts_7d = randBetween(3, 15)
+        snap.rd_avg_upvotes_7d = randBetween(20, 500)
+        snap.rd_total_views_7d = randBetween(5000, 80000)
+        snap.rd_comments_received_7d = randBetween(10, 200)
+        snap.rd_top_post_upvotes = randBetween(100, 3000)
+        snap.rd_link_clicks_7d = randBetween(10, 200)
+        snap.rd_subreddits_posted_7d = randBetween(2, 8)
+        snap.rd_account_age_days = randBetween(30, 365)
+      }
 
       snapshots.push(snap)
     }
