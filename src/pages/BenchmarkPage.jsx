@@ -64,6 +64,7 @@ export default function BenchmarkPage() {
         platform: a.platform,
         modelName: a.model?.name || 'Unknown',
         modelId: a.model_id,
+        accountType: a.account_type,
         followers,
         followerGrowthPct,
         vtfr,
@@ -193,7 +194,7 @@ export default function BenchmarkPage() {
         </div>
         <button className="btn btn-secondary" onClick={() => {
           const rows = benchmark.map(a => ({
-            handle: a.handle, platform: a.platform, model: a.modelName,
+            handle: a.handle, platform: a.platform, type: a.accountType, model: a.modelName,
             followers: a.followers, growth_pct: a.followerGrowthPct.toFixed(1),
             vtfr: a.vtfr.toFixed(1), er: a.er.toFixed(2),
             views_7d: a.views7d, clicks_7d: a.clicks7d
@@ -290,6 +291,7 @@ export default function BenchmarkPage() {
                 <th>Handle</th>
                 <th>Model</th>
                 <th>Platform</th>
+                <th>Type</th>
                 <th className="numeric">Followers</th>
                 <th className="numeric">Growth</th>
                 <th style={{ textAlign: 'center' }}>Follower Trend</th>
@@ -311,6 +313,7 @@ export default function BenchmarkPage() {
                     <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
                     <td>{a.modelName}</td>
                     <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{a.accountType || '—'}</td>
                     <td className="numeric font-semibold">{formatNumber(a.followers)}</td>
                     <td className="numeric">
                       <span style={{ color: a.followerGrowthPct >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>

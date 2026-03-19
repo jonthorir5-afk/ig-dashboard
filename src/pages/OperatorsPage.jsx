@@ -223,7 +223,7 @@ export default function OperatorsPage() {
                     </select>
                     <select value={newTask.account_id} onChange={e => setNewTask({ ...newTask, account_id: e.target.value })} style={{ ...taskInputStyle, width: '160px' }}>
                       <option value="">No account</option>
-                      {selectedAccounts.map(a => <option key={a.id} value={a.id}>@{a.handle}</option>)}
+                      {selectedAccounts.map(a => <option key={a.id} value={a.id}>@{a.handle}{a.account_type ? ` (${a.account_type})` : ''}</option>)}
                     </select>
                   </div>
                   <textarea
@@ -291,6 +291,7 @@ export default function OperatorsPage() {
                   <tr>
                     <th>Account</th>
                     <th>Platform</th>
+                    <th>Type</th>
                     <th>Health</th>
                     <th className="numeric">Followers</th>
                     <th className="numeric">Views 7d</th>
@@ -303,6 +304,7 @@ export default function OperatorsPage() {
                       <tr key={a.id}>
                         <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
                         <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{a.account_type || '—'}</td>
                         <td>
                           <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
                             {a.health}
@@ -314,7 +316,7 @@ export default function OperatorsPage() {
                     )
                   })}
                   {selectedOp.accounts.length === 0 && (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts assigned.</td></tr>
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts assigned.</td></tr>
                   )}
                 </tbody>
               </table>

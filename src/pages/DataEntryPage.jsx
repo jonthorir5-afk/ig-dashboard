@@ -267,7 +267,7 @@ export default function DataEntryPage() {
           <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)} style={inputStyle}>
             <option value="">Select an account</option>
             {filteredAccounts.map(a => (
-              <option key={a.id} value={a.id}>@{a.handle} ({a.platform}){a.model?.name ? ` — ${a.model.name}` : ''}</option>
+              <option key={a.id} value={a.id}>@{a.handle} ({a.platform}{a.account_type ? ` · ${a.account_type}` : ''}){a.model?.name ? ` — ${a.model.name}` : ''}</option>
             ))}
           </select>
         </div>
