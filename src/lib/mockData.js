@@ -47,34 +47,97 @@ export const mockProfiles = [
 
 // ── Models ──
 export const mockModels = [
-  { id: uuid(10), name: 'luna_ray', display_name: 'Luna Ray', status: 'Active', of_username: 'lunaray', notes: 'Top performer', created_at: daysAgo(100), updated_at: daysAgo(2) },
-  { id: uuid(11), name: 'maya_bliss', display_name: 'Maya Bliss', status: 'Active', of_username: 'mayabliss', notes: '', created_at: daysAgo(90), updated_at: daysAgo(5) },
-  { id: uuid(12), name: 'jade_stone', display_name: 'Jade Stone', status: 'Active', of_username: 'jadestone', notes: 'Growing fast', created_at: daysAgo(80), updated_at: daysAgo(1) },
-  { id: uuid(13), name: 'ruby_fox', display_name: 'Ruby Fox', status: 'Onboarding', of_username: 'rubyfox', notes: 'New creator', created_at: daysAgo(14), updated_at: daysAgo(1) },
-  { id: uuid(14), name: 'nova_star', display_name: 'Nova Star', status: 'Paused', of_username: 'novastar', notes: 'On break until April', created_at: daysAgo(70), updated_at: daysAgo(10) },
+  { id: uuid(10), name: 'ariana', display_name: 'Ariana', status: 'Active', of_username: 'ariana', notes: '', created_at: daysAgo(100), updated_at: daysAgo(2) },
+  { id: uuid(11), name: 'rose', display_name: 'Rose', status: 'Active', of_username: 'rose', notes: '', created_at: daysAgo(95), updated_at: daysAgo(3) },
+  { id: uuid(12), name: 'indibaby', display_name: 'Indibaby', status: 'Active', of_username: 'indibaby', notes: '', created_at: daysAgo(90), updated_at: daysAgo(1) },
+  { id: uuid(13), name: 'barbie', display_name: 'Barbie', status: 'Active', of_username: 'barbie', notes: '', created_at: daysAgo(85), updated_at: daysAgo(4) },
+  { id: uuid(14), name: 'franche', display_name: 'Franche', status: 'Active', of_username: 'franche', notes: '', created_at: daysAgo(80), updated_at: daysAgo(2) },
+  { id: uuid(15), name: 'moxie', display_name: 'Moxie', status: 'Active', of_username: 'moxie', notes: '', created_at: daysAgo(75), updated_at: daysAgo(1) },
+  { id: uuid(16), name: 'lola', display_name: 'Lola', status: 'Active', of_username: 'lola', notes: '', created_at: daysAgo(70), updated_at: daysAgo(5) },
+  { id: uuid(17), name: 'maple', display_name: 'Maple', status: 'Active', of_username: 'maple', notes: '', created_at: daysAgo(65), updated_at: daysAgo(3) },
+  { id: uuid(18), name: 'olivia', display_name: 'Olivia', status: 'Active', of_username: 'olivia', notes: '', created_at: daysAgo(60), updated_at: daysAgo(2) },
+  { id: uuid(19), name: 'bella', display_name: 'Bella', status: 'Active', of_username: 'bella', notes: '', created_at: daysAgo(55), updated_at: daysAgo(1) },
+  { id: uuid(20), name: 'angelmoon', display_name: 'AngelMoon', status: 'Active', of_username: 'angelmoon', notes: '', created_at: daysAgo(50), updated_at: daysAgo(4) },
+  { id: uuid(21), name: 'dawn', display_name: 'Dawn', status: 'Active', of_username: 'dawn', notes: '', created_at: daysAgo(45), updated_at: daysAgo(2) },
+  { id: uuid(22), name: 'gia', display_name: 'Gia', status: 'Active', of_username: 'gia', notes: '', created_at: daysAgo(40), updated_at: daysAgo(1) },
 ]
 
 // ── Accounts ──
+// First account per model is Primary, rest are Farm
 const accountDefs = [
-  // Luna Ray accounts
-  { id: uuid(100), model_id: uuid(10), platform: 'instagram', handle: 'lunaray_official', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
-  { id: uuid(101), model_id: uuid(10), platform: 'twitter', handle: 'lunaray_x', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
-  { id: uuid(102), model_id: uuid(10), platform: 'tiktok', handle: 'lunaray_tt', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
-  { id: uuid(103), model_id: uuid(10), platform: 'reddit', handle: 'u/lunaray_real', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
-  // Maya Bliss accounts
-  { id: uuid(110), model_id: uuid(11), platform: 'instagram', handle: 'mayabliss_', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
-  { id: uuid(111), model_id: uuid(11), platform: 'twitter', handle: 'mayabliss_x', account_type: 'Primary', status: 'Active', health: 'Limited', assigned_operator: uuid(4) },
-  { id: uuid(112), model_id: uuid(11), platform: 'reddit', handle: 'u/mayabliss', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
-  // Jade Stone accounts
-  { id: uuid(120), model_id: uuid(12), platform: 'instagram', handle: 'jadestone_ig', account_type: 'Primary', status: 'Active', health: 'Shadowbanned', assigned_operator: uuid(3) },
-  { id: uuid(121), model_id: uuid(12), platform: 'instagram', handle: 'jade.backup', account_type: 'Backup', status: 'Warming Up', health: 'Clean', assigned_operator: uuid(3) },
-  { id: uuid(122), model_id: uuid(12), platform: 'tiktok', handle: 'jadestone_tt', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
-  // Ruby Fox accounts
-  { id: uuid(130), model_id: uuid(13), platform: 'instagram', handle: 'rubyfox_new', account_type: 'Primary', status: 'Warming Up', health: 'Clean', assigned_operator: uuid(4) },
-  { id: uuid(131), model_id: uuid(13), platform: 'twitter', handle: 'rubyfox_x', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
-  // Nova Star accounts
-  { id: uuid(140), model_id: uuid(14), platform: 'instagram', handle: 'novastar_ig', account_type: 'Primary', status: 'Active', health: 'Action Blocked', assigned_operator: uuid(3) },
-  { id: uuid(141), model_id: uuid(14), platform: 'reddit', handle: 'u/novastar', account_type: 'Primary', status: 'Active', health: 'Karma Farming', assigned_operator: uuid(4) },
+  // ARIANA — 7 X accounts
+  { id: uuid(100), model_id: uuid(10), platform: 'twitter', handle: 'ArianaAngelsxo', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(101), model_id: uuid(10), platform: 'twitter', handle: 'TsAriAngelsxox', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(102), model_id: uuid(10), platform: 'twitter', handle: 'TSArianaAngelsx', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(103), model_id: uuid(10), platform: 'twitter', handle: 'TSAriiAngels', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(104), model_id: uuid(10), platform: 'twitter', handle: 'TSAngelArii', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(105), model_id: uuid(10), platform: 'twitter', handle: 'AriAngelsXo', account_type: 'Farm', status: 'Active', health: 'Limited', assigned_operator: uuid(4) },
+  { id: uuid(106), model_id: uuid(10), platform: 'twitter', handle: 'Isabelacasiu', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // ROSE — 3 X accounts
+  { id: uuid(110), model_id: uuid(11), platform: 'twitter', handle: 'porcelaingoirl', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(111), model_id: uuid(11), platform: 'twitter', handle: 'TsPorcelainbby', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(112), model_id: uuid(11), platform: 'twitter', handle: 'valeriapasion7', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+
+  // INDIBABY — 5 X accounts
+  { id: uuid(120), model_id: uuid(12), platform: 'twitter', handle: 'IndibabyTs', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(121), model_id: uuid(12), platform: 'twitter', handle: 'TsIndigirlxo', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(122), model_id: uuid(12), platform: 'twitter', handle: 'Indibabyxo', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(123), model_id: uuid(12), platform: 'twitter', handle: 'Indibabyx', account_type: 'Farm', status: 'Active', health: 'Limited', assigned_operator: uuid(4) },
+  { id: uuid(124), model_id: uuid(12), platform: 'twitter', handle: 'TSindibaby', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+
+  // BARBIE — 4 X accounts
+  { id: uuid(130), model_id: uuid(13), platform: 'twitter', handle: 'Tsbarbiegirlx', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(131), model_id: uuid(13), platform: 'twitter', handle: 'Ebarbiebbyx', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(132), model_id: uuid(13), platform: 'twitter', handle: 'Tsbarbiegirlxx', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(133), model_id: uuid(13), platform: 'twitter', handle: 'Ebarbiexxgirl', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+
+  // FRANCHE — 5 X accounts
+  { id: uuid(140), model_id: uuid(14), platform: 'twitter', handle: 'franchebbyy', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(141), model_id: uuid(14), platform: 'twitter', handle: 'Tsfrancheexo', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(142), model_id: uuid(14), platform: 'twitter', handle: 'franchetgirl', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(143), model_id: uuid(14), platform: 'twitter', handle: 'Tsfranchecutie', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(144), model_id: uuid(14), platform: 'twitter', handle: 'franchebbyx', account_type: 'Farm', status: 'Active', health: 'Limited', assigned_operator: uuid(4) },
+
+  // MOXIE — 5 X accounts
+  { id: uuid(150), model_id: uuid(15), platform: 'twitter', handle: 'moxiedoll', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(151), model_id: uuid(15), platform: 'twitter', handle: 'tsdollymoxie', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(152), model_id: uuid(15), platform: 'twitter', handle: 'TsMoxiebby', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(153), model_id: uuid(15), platform: 'twitter', handle: 'isabelaramir3', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(154), model_id: uuid(15), platform: 'twitter', handle: 'moxiedollts', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // LOLA — 3 X accounts
+  { id: uuid(160), model_id: uuid(16), platform: 'twitter', handle: 'transbabydollx', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(161), model_id: uuid(16), platform: 'twitter', handle: 'TsLolaxox', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(162), model_id: uuid(16), platform: 'twitter', handle: 'bbytransgirlx', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // MAPLE — 2 X accounts
+  { id: uuid(170), model_id: uuid(17), platform: 'twitter', handle: 'LittlemapleB', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(171), model_id: uuid(17), platform: 'twitter', handle: 'BbyTransCutie', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // OLIVIA — 5 X accounts
+  { id: uuid(180), model_id: uuid(18), platform: 'twitter', handle: 'TsOliviaxSkye', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(181), model_id: uuid(18), platform: 'twitter', handle: 'TsOliviaSkyexox', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(182), model_id: uuid(18), platform: 'twitter', handle: 'Oliviacutiexxo', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(183), model_id: uuid(18), platform: 'twitter', handle: 'Oliviaskyexx', account_type: 'Farm', status: 'Active', health: 'Limited', assigned_operator: uuid(3) },
+  { id: uuid(184), model_id: uuid(18), platform: 'twitter', handle: 'OliviaSkyexxo', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+
+  // BELLA — 2 X accounts
+  { id: uuid(190), model_id: uuid(19), platform: 'twitter', handle: 'dollytsbella', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(191), model_id: uuid(19), platform: 'twitter', handle: 'tsbelladollz', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // ANGELMOON — 3 X accounts
+  { id: uuid(200), model_id: uuid(20), platform: 'twitter', handle: 'SinnyRose', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(201), model_id: uuid(20), platform: 'twitter', handle: 'TsAngelMoon', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(202), model_id: uuid(20), platform: 'twitter', handle: 'cutieTsangel', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+
+  // DAWN — 2 X accounts
+  { id: uuid(210), model_id: uuid(21), platform: 'twitter', handle: 'dawnriveraa', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
+  { id: uuid(211), model_id: uuid(21), platform: 'twitter', handle: 'Tsdawnbby', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+
+  // GIA — 2 X accounts
+  { id: uuid(220), model_id: uuid(22), platform: 'twitter', handle: 'Tsbbydollx', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: uuid(4) },
+  { id: uuid(221), model_id: uuid(22), platform: 'twitter', handle: 'tsbbygf', account_type: 'Farm', status: 'Active', health: 'Clean', assigned_operator: uuid(3) },
 ]
 
 function getModelForAccount(acc) {
@@ -89,7 +152,7 @@ function getOperatorForAccount(acc) {
 
 export const mockAccounts = accountDefs.map(a => ({
   ...a,
-  account_url: `https://${a.platform}.com/${a.handle}`,
+  account_url: `https://x.com/${a.handle}`,
   created_at: daysAgo(randBetween(30, 100)),
   updated_at: daysAgo(randBetween(0, 7)),
   model: getModelForAccount(a),
@@ -134,46 +197,16 @@ function generateSnapshots() {
         },
       }
 
-      // Platform-specific metrics
-      if (acc.platform === 'instagram') {
-        snap.ig_views_7d = randBetween(5000, 120000)
-        snap.ig_views_30d = snap.ig_views_7d * randBetween(3, 5)
-        snap.ig_reach_7d = Math.floor(snap.ig_views_7d * (0.4 + rand() * 0.4))
-        snap.ig_profile_visits_7d = randBetween(200, 3000)
-        snap.ig_link_clicks_7d = randBetween(20, 500)
-        snap.ig_reels_posted_7d = randBetween(2, 10)
-        snap.ig_stories_posted_7d = randBetween(5, 25)
-        snap.ig_top_reel_views = randBetween(10000, 200000)
-      } else if (acc.platform === 'twitter') {
-        snap.tw_impressions_7d = randBetween(10000, 200000)
-        snap.tw_views_7d = randBetween(8000, 150000)
-        snap.tw_retweets_7d = randBetween(50, 800)
-        snap.tw_likes_7d = randBetween(200, 3000)
-        snap.tw_replies_7d = randBetween(30, 500)
-        snap.tw_link_clicks_7d = randBetween(10, 300)
-        snap.tw_tweets_posted_7d = randBetween(5, 30)
-        snap.tw_dms_sent_7d = randBetween(10, 100)
-        snap.tw_dm_response_rate = parseFloat((rand() * 60 + 30).toFixed(1))
-      } else if (acc.platform === 'reddit') {
-        snap.rd_karma_total = randBetween(500, 25000)
-        snap.rd_posts_7d = randBetween(3, 15)
-        snap.rd_avg_upvotes_7d = randBetween(20, 500)
-        snap.rd_total_views_7d = randBetween(5000, 80000)
-        snap.rd_comments_received_7d = randBetween(10, 200)
-        snap.rd_top_post_upvotes = randBetween(100, 3000)
-        snap.rd_link_clicks_7d = randBetween(10, 200)
-        snap.rd_subreddits_posted_7d = randBetween(2, 8)
-        snap.rd_account_age_days = randBetween(30, 365)
-      } else if (acc.platform === 'tiktok') {
-        snap.tt_views_7d = randBetween(10000, 500000)
-        snap.tt_likes_7d = randBetween(500, 20000)
-        snap.tt_comments_7d = randBetween(50, 2000)
-        snap.tt_shares_7d = randBetween(20, 1000)
-        snap.tt_videos_posted_7d = randBetween(3, 12)
-        snap.tt_avg_watch_time = parseFloat((rand() * 25 + 5).toFixed(1))
-        snap.tt_profile_views_7d = randBetween(500, 10000)
-        snap.tt_link_clicks_7d = randBetween(10, 300)
-      }
+      // All accounts are Twitter/X for now
+      snap.tw_impressions_7d = randBetween(10000, 200000)
+      snap.tw_views_7d = randBetween(8000, 150000)
+      snap.tw_retweets_7d = randBetween(50, 800)
+      snap.tw_likes_7d = randBetween(200, 3000)
+      snap.tw_replies_7d = randBetween(30, 500)
+      snap.tw_link_clicks_7d = randBetween(10, 300)
+      snap.tw_tweets_posted_7d = randBetween(5, 30)
+      snap.tw_dms_sent_7d = randBetween(10, 100)
+      snap.tw_dm_response_rate = parseFloat((rand() * 60 + 30).toFixed(1))
 
       snapshots.push(snap)
     }
@@ -185,10 +218,10 @@ export const mockSnapshots = generateSnapshots()
 
 // ── Tasks ──
 export const mockTasks = [
-  { id: uuid(2000), title: 'Review Luna IG analytics', description: 'Check weekly performance', priority: 'high', assignee_id: uuid(3), account_id: uuid(100), status: 'open', created_by: uuid(2), completed_at: null, assignee: { id: uuid(3), display_name: 'Mike Ops' }, account: { id: uuid(100), handle: 'lunaray_official', platform: 'instagram' } },
-  { id: uuid(2001), title: 'Fix Jade shadowban', description: 'Investigate and resolve shadowban on main IG', priority: 'urgent', assignee_id: uuid(3), account_id: uuid(120), status: 'open', created_by: uuid(2), completed_at: null, assignee: { id: uuid(3), display_name: 'Mike Ops' }, account: { id: uuid(120), handle: 'jadestone_ig', platform: 'instagram' } },
-  { id: uuid(2002), title: 'Onboard Ruby Fox socials', description: 'Set up remaining accounts', priority: 'normal', assignee_id: uuid(4), account_id: uuid(130), status: 'open', created_by: uuid(1), completed_at: null, assignee: { id: uuid(4), display_name: 'Jess Ops' }, account: { id: uuid(130), handle: 'rubyfox_new', platform: 'instagram' } },
-  { id: uuid(2003), title: 'Post 5 reels for Maya', description: 'Weekly content schedule', priority: 'normal', assignee_id: uuid(4), account_id: uuid(110), status: 'done', created_by: uuid(2), completed_at: daysAgo(2), assignee: { id: uuid(4), display_name: 'Jess Ops' }, account: { id: uuid(110), handle: 'mayabliss_', platform: 'instagram' } },
+  { id: uuid(2000), title: 'Review Ariana primary analytics', description: 'Check weekly performance on main account', priority: 'high', assignee_id: uuid(3), account_id: uuid(100), status: 'open', created_by: uuid(2), completed_at: null, assignee: { id: uuid(3), display_name: 'Mike Ops' }, account: { id: uuid(100), handle: 'ArianaAngelsxo', platform: 'twitter' } },
+  { id: uuid(2001), title: 'Fix Olivia limited account', description: 'Investigate limited status on Oliviaskyexx', priority: 'urgent', assignee_id: uuid(3), account_id: uuid(183), status: 'open', created_by: uuid(2), completed_at: null, assignee: { id: uuid(3), display_name: 'Mike Ops' }, account: { id: uuid(183), handle: 'Oliviaskyexx', platform: 'twitter' } },
+  { id: uuid(2002), title: 'Warm up Indibaby farms', description: 'Get new farm accounts posting regularly', priority: 'normal', assignee_id: uuid(4), account_id: uuid(121), status: 'open', created_by: uuid(1), completed_at: null, assignee: { id: uuid(4), display_name: 'Jess Ops' }, account: { id: uuid(121), handle: 'TsIndigirlxo', platform: 'twitter' } },
+  { id: uuid(2003), title: 'Post content for Moxie', description: 'Weekly content schedule across farm accounts', priority: 'normal', assignee_id: uuid(4), account_id: uuid(150), status: 'done', created_by: uuid(2), completed_at: daysAgo(2), assignee: { id: uuid(4), display_name: 'Jess Ops' }, account: { id: uuid(150), handle: 'moxiedoll', platform: 'twitter' } },
 ]
 
 // ── Demo user for auth bypass ──
