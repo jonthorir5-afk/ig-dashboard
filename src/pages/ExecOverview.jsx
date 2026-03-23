@@ -308,6 +308,7 @@ export default function ExecOverview() {
                 <div>
                   <span style={{ color: 'var(--text-primary)', fontSize: '0.875rem' }}>@{a.handle}</span>
                   <span style={{ marginLeft: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem', textTransform: 'capitalize' }}>{a.platform}</span>
+                  {a.account_type && a.account_type !== 'Primary' && <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>({a.account_type})</span>}
                 </div>
                 <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
                   {a.health}

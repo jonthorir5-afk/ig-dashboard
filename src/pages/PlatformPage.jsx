@@ -151,6 +151,7 @@ export default function PlatformPage() {
                 <th>Handle</th>
                 <th>Model</th>
                 {!selectedPlatform && <th>Platform</th>}
+                <th>Type</th>
                 <th>Health</th>
                 <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>
                 <th style={{ textAlign: 'center' }}>Trend</th>
@@ -169,6 +170,7 @@ export default function PlatformPage() {
                     <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
                     <td>{a.model?.name || '—'}</td>
                     {!selectedPlatform && <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>}
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{a.account_type || '—'}</td>
                     <td>
                       <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
                         {a.health}

@@ -212,6 +212,7 @@ export default function ModelDetailPage() {
                 <div>
                   <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>@{account.handle}</span>
                   <span style={{ marginLeft: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem', textTransform: 'capitalize' }}>{account.platform}</span>
+                  {account.account_type && <span style={{ marginLeft: '0.4rem', padding: '0.1rem 0.4rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 600, background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>{account.account_type}</span>}
                 </div>
                 <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
                   {account.health}
