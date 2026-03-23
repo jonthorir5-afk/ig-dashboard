@@ -1,9 +1,12 @@
 import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import { useState } from 'react'
 import {
   LayoutDashboard, Users, Activity, Settings, Bell, UserCircle,
-  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList, BarChart3, FileText
+  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList, BarChart3, FileText,
+  Database, TestTube2
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { isDemoMode, enableDemoMode, disableDemoMode } from './lib/mockData'
 import LoginPage from './components/LoginPage'
 import ExecOverview from './pages/ExecOverview'
 import ModelsPage from './pages/ModelsPage'
@@ -27,6 +30,32 @@ function NavItem({ to, icon: Icon, label, badge }) {
       <span>{label}</span>
       {badge && <span className="badge badge-primary">{badge}</span>}
     </Link>
+  )
+}
+
+function DataSourceToggle() {
+  const [isDemo, setIsDemo] = useState(isDemoMode())
+
+  const toggle = () => {
+    if (isDemo) {
+      disableDemoMode()
+    } else {
+      enableDemoMode()
+    }
+    setIsDemo(!isDemo)
+    window.location.reload()
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className="data-source-toggle"
+      title={isDemo ? 'Using mock data — click to switch to real data' : 'Using real data — click to switch to mock data'}
+    >
+      {isDemo ? <TestTube2 size={16} /> : <Database size={16} />}
+      <span>{isDemo ? 'Mock Data' : 'Real Data'}</span>
+      <span className={`toggle-indicator ${isDemo ? 'mock' : 'real'}`} />
+    </button>
   )
 }
 
@@ -59,6 +88,7 @@ function AppShell() {
           </nav>
 
           <div className="sidebar-footer">
+            <DataSourceToggle />
             <div className="user-profile">
               <div className="avatar">{(profile?.display_name || 'U').charAt(0).toUpperCase()}</div>
               <div className="user-info">
