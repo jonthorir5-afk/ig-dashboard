@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, ChevronRight, Check, Save, Upload } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Check, Save, Upload, RefreshCw } from 'lucide-react'
 import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGrade } from '../lib/metrics'
@@ -30,6 +30,10 @@ export default function DataEntryPage() {
   const [health, setHealth] = useState('Clean')
   const [notes, setNotes] = useState('')
   const [fields, setFields] = useState({})
+
+  // API sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncResults, setSyncResults] = useState(null)
 
   // Per-post data (for Instagram VTFR/ER)
   const [posts, setPosts] = useState([])
@@ -224,6 +228,28 @@ export default function DataEntryPage() {
     }
   }
 
+  const handleApiSync = async (platform) => {
+    setSyncing(true)
+    setSyncResults(null)
+    try {
+      const res = await fetch(`/.netlify/functions/sync-${platform}`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      setSyncResults(data)
+      logAudit({
+        action: 'api_sync',
+        entity_type: 'platform',
+        entity_id: platform,
+        details: `API sync: ${data.synced} accounts updated, ${data.errors?.length || 0} errors`,
+        user_id: user?.id,
+      })
+    } catch (err) {
+      setSyncResults({ synced: 0, errors: [err.message] })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
   return (
@@ -240,6 +266,9 @@ export default function DataEntryPage() {
           <button className={`btn ${entryMode === 'csv' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('csv')}>
             <Upload size={16} /> CSV Import
           </button>
+          <button className={`btn ${entryMode === 'api' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('api')}>
+            <RefreshCw size={16} /> API Sync
+          </button>
         </div>
       </div>
 
@@ -247,6 +276,65 @@ export default function DataEntryPage() {
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <h3 style={{ marginBottom: '1rem' }}>Bulk CSV Import</h3>
           <CSVImport accounts={accounts} userId={user?.id} onComplete={() => {}} />
+        </div>
+      )}
+
+      {entryMode === 'api' && (
+        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+          <h3 style={{ marginBottom: '0.5rem' }}>API Sync</h3>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+            Pull follower counts and metrics from platform APIs for all active accounts. Creates a snapshot for today.
+          </p>
+
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleApiSync('twitter')}
+              disabled={syncing}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync Twitter/X'}
+            </button>
+          </div>
+
+          {syncResults && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <div style={{
+                padding: '1rem',
+                borderRadius: '8px',
+                background: syncResults.errors?.length && !syncResults.synced ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                border: `1px solid ${syncResults.errors?.length && !syncResults.synced ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
+              }}>
+                <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                  {syncResults.synced > 0 ? `Synced ${syncResults.synced} account${syncResults.synced !== 1 ? 's' : ''}` : 'Sync complete'}
+                  {syncResults.skipped > 0 && `, ${syncResults.skipped} skipped`}
+                </p>
+
+                {syncResults.details?.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Details:</p>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                      {syncResults.details.map((d, i) => (
+                        <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
+                          @{d.handle} — {d.action}, {d.followers?.toLocaleString()} followers
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {syncResults.errors?.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--accent-danger)', marginBottom: '0.5rem' }}>Errors:</p>
+                    {syncResults.errors.map((e, i) => (
+                      <p key={i} style={{ fontSize: '0.8rem', color: 'var(--accent-danger)' }}>{e}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
