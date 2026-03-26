@@ -588,6 +588,10 @@
   gap: 0.5rem;
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Loader Animation */
 @keyframes spin {
   0% {
