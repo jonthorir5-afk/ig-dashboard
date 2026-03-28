@@ -35,8 +35,16 @@ function NavItem({ to, icon: Icon, label, badge }) {
 
 function NavDropdown({ icon: Icon, label, children }) {
   const location = useLocation()
-  const childPaths = children.map(c => c.to)
-  const isActive = childPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
+  const getAllPaths = (items) => {
+    let paths = []
+    for (const c of items) {
+      if (c.to) paths.push(c.to)
+      if (c.children) paths = paths.concat(getAllPaths(c.children))
+    }
+    return paths
+  }
+  const allPaths = getAllPaths(children)
+  const isActive = allPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
   const [open, setOpen] = useState(isActive)
 
   return (
@@ -52,9 +60,13 @@ function NavDropdown({ icon: Icon, label, children }) {
       </button>
       {open && (
         <div style={{ paddingLeft: '1rem' }}>
-          {children.map(child => (
-            <NavItem key={child.to} to={child.to} icon={child.icon} label={child.label} />
-          ))}
+          {children.map(child =>
+            child.children ? (
+              <NavDropdown key={child.label} icon={child.icon} label={child.label} children={child.children} />
+            ) : (
+              <NavItem key={child.to} to={child.to} icon={child.icon} label={child.label} />
+            )
+          )}
         </div>
       )}
     </div>
@@ -115,9 +127,16 @@ function AppShell() {
             ]} />
             <NavItem to="/operators" icon={UserCircle} label="Operators" />
             <NavItem to="/data-entry" icon={ClipboardList} label="Data Entry" />
-            <NavItem to="/benchmark" icon={BarChart3} label="Benchmark" />
-            <NavItem to="/digest" icon={FileText} label="Weekly Digest" />
-            <NavItem to="/alerts" icon={AlertTriangle} label="Alerts" />
+            <NavDropdown icon={BarChart3} label="Analytics" children={[
+              { icon: BarChart3, label: 'Benchmark', children: [
+                { to: '/benchmark/twitter', icon: Activity, label: 'Twitter / X' },
+                { to: '/benchmark/reddit', icon: Activity, label: 'Reddit' },
+                { to: '/benchmark/instagram', icon: Activity, label: 'Instagram' },
+                { to: '/benchmark/tiktok', icon: Activity, label: 'TikTok' },
+              ]},
+              { to: '/digest', icon: FileText, label: 'Weekly Digest' },
+              { to: '/alerts', icon: AlertTriangle, label: 'Alerts' },
+            ]} />
           </nav>
 
           <div className="sidebar-footer">
@@ -152,6 +171,7 @@ function AppShell() {
               <Route path="/operators" element={<OperatorsPage />} />
               <Route path="/data-entry" element={<DataEntryPage />} />
               <Route path="/benchmark" element={<BenchmarkPage />} />
+              <Route path="/benchmark/:platform" element={<BenchmarkPage />} />
               <Route path="/digest" element={<WeeklyDigestPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="*" element={<Navigate to="/" />} />
