@@ -233,8 +233,10 @@ export default function DataEntryPage() {
     setSyncResults(null)
     try {
       const res = await fetch(`/.netlify/functions/sync-${platform}`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      const text = await res.text()
+      let data
+      try { data = JSON.parse(text) } catch { throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 500)}`) }
+      if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`)
       setSyncResults(data)
       logAudit({
         action: 'api_sync',
