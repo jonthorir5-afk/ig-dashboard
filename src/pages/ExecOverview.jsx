@@ -19,6 +19,37 @@ export default function ExecOverview() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Per-model, per-platform follower totals for the summary table
+  const modelPlatformTable = useMemo(() => {
+    if (!data) return []
+    const { models, accounts, snapshots: snaps } = data
+    // Build latest snapshot per account
+    const latestSnap = {}
+    for (const s of snaps) {
+      if (!latestSnap[s.account_id] || s.snapshot_date > latestSnap[s.account_id].snapshot_date) {
+        latestSnap[s.account_id] = s
+      }
+    }
+    return models
+      .sort((a, b) => (a.display_name || a.name).localeCompare(b.display_name || b.name))
+      .map(model => {
+        const modelAccounts = accounts.filter(a => a.model_id === model.id)
+        const row = { id: model.id, name: model.display_name || model.name, of_username: model.of_username }
+        for (const p of ['twitter', 'reddit', 'instagram', 'tiktok']) {
+          const platAccts = modelAccounts.filter(a => a.platform === p)
+          if (!platAccts.length) { row[p] = null; continue }
+          let totalFollowers = 0
+          let hasData = false
+          for (const acc of platAccts) {
+            const snap = latestSnap[acc.id]
+            if (snap) { totalFollowers += snap.followers || 0; hasData = true }
+          }
+          row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
+        }
+        return row
+      })
+  }, [data])
+
   const stats = useMemo(() => {
     if (!data) return null
 
@@ -224,6 +255,85 @@ export default function ExecOverview() {
           </Link>
         ))}
       </div>
+
+      {/* Model × Platform Table */}
+      {modelPlatformTable.length > 0 && (
+        <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '1.25rem 1.5rem 0.75rem' }}>
+            <h3 style={{ fontSize: '0.95rem' }}>Model Overview</h3>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="accounts-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', minWidth: '160px' }}>Creator</th>
+                  <th style={{ textAlign: 'center', minWidth: '110px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>𝕏</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>Twitter</span>
+                    </div>
+                  </th>
+                  <th style={{ textAlign: 'center', minWidth: '110px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>R</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>Reddit</span>
+                    </div>
+                  </th>
+                  <th style={{ textAlign: 'center', minWidth: '110px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>IG</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>Instagram</span>
+                    </div>
+                  </th>
+                  <th style={{ textAlign: 'center', minWidth: '110px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>TT</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>TikTok</span>
+                    </div>
+                  </th>
+                  <th style={{ textAlign: 'center', minWidth: '110px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>OF</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>Subs</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelPlatformTable.map(row => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link to={`/models/${row.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{row.name}</span>
+                        {row.of_username && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.7rem' }}>@{row.of_username}</span>}
+                      </Link>
+                    </td>
+                    {['twitter', 'reddit', 'instagram', 'tiktok'].map(p => (
+                      <td key={p} style={{ textAlign: 'center' }}>
+                        {row[p] ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                              {row[p].followers != null ? formatNumber(row[p].followers) : '—'}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>
+                              {row[p].accounts} acct{row[p].accounts !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                        )}
+                      </td>
+                    ))}
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Trend Charts */}
       {dailyTrend.length > 1 && (

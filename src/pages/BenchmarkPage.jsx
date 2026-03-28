@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import { Download, Filter } from 'lucide-react'
 import { getAccounts, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, vtfrGrade, erGrade, exportToCSV } from '../lib/metrics'
@@ -7,12 +8,18 @@ import HeatmapGrid, { vtfrColorScale, erColorScale, viewsColorScale, followerGro
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 import Sparkline from '../components/charts/Sparkline'
 
+const PLATFORM_LABELS = { twitter: 'Twitter / X', reddit: 'Reddit', instagram: 'Instagram', tiktok: 'TikTok' }
+
 export default function BenchmarkPage() {
+  const { platform: urlPlatform } = useParams()
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filterPlatform, setFilterPlatform] = useState('')
+  const [filterPlatform, setFilterPlatform] = useState(urlPlatform || '')
   const [filterModel, setFilterModel] = useState('')
+
+  // Sync URL param to filter
+  useEffect(() => { setFilterPlatform(urlPlatform || '') }, [urlPlatform])
   const [timeRange, setTimeRange] = useState(30)
 
   useEffect(() => {
@@ -189,7 +196,7 @@ export default function BenchmarkPage() {
     <div className="dashboard-container">
       <div className="dashboard-header">
         <div>
-          <h1 className="text-gradient">Benchmarking & Analytics</h1>
+          <h1 className="text-gradient">{urlPlatform ? `${PLATFORM_LABELS[urlPlatform] || urlPlatform} Benchmark` : 'Benchmarking & Analytics'}</h1>
           <p>VTFR/ER performance across {benchmark.length} accounts</p>
         </div>
         <button className="btn btn-secondary" onClick={() => {
