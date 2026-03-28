@@ -32,10 +32,11 @@ export default async function handler(req) {
     const username = account.handle.replace(/^u\//, '')
 
     try {
-      // Reddit exposes public user data at this endpoint — no API key needed
-      const res = await fetch(`https://www.reddit.com/user/${username}/about.json`, {
+      // Use old.reddit.com — less restrictive with serverless IPs
+      const res = await fetch(`https://old.reddit.com/user/${username}/about.json`, {
         headers: {
-          'User-Agent': 'ig-dashboard/1.0 (social media metrics tracker)',
+          'User-Agent': 'Mozilla/5.0 (compatible; ig-dashboard/1.0; social media metrics)',
+          'Accept': 'application/json',
         },
       })
 
