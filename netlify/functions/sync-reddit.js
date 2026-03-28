@@ -5,15 +5,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 )
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN
-
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
-  }
-
-  if (!APIFY_TOKEN) {
-    return new Response(JSON.stringify({ error: 'APIFY_TOKEN not configured' }), { status: 500 })
   }
 
   // Fetch all active Reddit accounts
@@ -34,68 +28,60 @@ export default async function handler(req) {
   const today = new Date().toISOString().split('T')[0]
   const results = { synced: 0, skipped: 0, errors: [], details: [] }
 
-  // Build start URLs for all Reddit accounts
-  const startUrls = accounts.map(a => ({
-    url: `https://www.reddit.com/user/${a.handle.replace(/^u\//, '')}`
-  }))
+  for (const account of accounts) {
+    const username = account.handle.replace(/^u\//, '')
 
-  try {
-    // Run the Apify Reddit scraper and wait for results
-    const runRes = await fetch(
-      `https://api.apify.com/v2/acts/trudax~reddit-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startUrls,
-          maxItems: accounts.length * 2,
-          maxPostCount: 0,
-          maxComments: 0,
-          maxCommunitiesCount: 0,
-          maxUserCount: accounts.length,
-          scrollTimeout: 40,
-          proxy: {
-            useApifyProxy: true,
-          },
-        }),
+    try {
+      // Reddit exposes public user data at this endpoint — no API key needed
+      const res = await fetch(`https://www.reddit.com/user/${username}/about.json`, {
+        headers: {
+          'User-Agent': 'ig-dashboard/1.0 (social media metrics tracker)',
+        },
+      })
+
+      if (res.status === 404) {
+        results.errors.push(`u/${username}: account not found`)
+        results.skipped++
+        continue
       }
-    )
 
-    if (!runRes.ok) {
-      const errText = await runRes.text()
-      return new Response(JSON.stringify({ synced: 0, errors: [`Apify error ${runRes.status}: ${errText}`] }), { status: 200 })
-    }
+      if (res.status === 403 || res.status === 429) {
+        results.errors.push(`u/${username}: rate limited or blocked (${res.status})`)
+        results.skipped++
+        continue
+      }
 
-    const items = await runRes.json()
+      if (!res.ok) {
+        results.errors.push(`u/${username}: Reddit returned ${res.status}`)
+        results.skipped++
+        continue
+      }
 
-    // Filter to user profile items only
-    const userItems = items.filter(item =>
-      item.dataType === 'user' || item.type === 'user' || item.username || item.name
-    )
+      const json = await res.json()
+      const user = json.data
 
-    for (const item of userItems) {
-      const username = (item.username || item.name || '').toLowerCase()
-      const account = accounts.find(
-        a => a.handle.replace(/^u\//, '').toLowerCase() === username
-      )
-      if (!account) continue
+      if (!user) {
+        results.errors.push(`u/${username}: no user data returned`)
+        results.skipped++
+        continue
+      }
 
       // Calculate account age in days
-      const createdUtc = item.createdAt || item.created_utc || item.created
       let accountAgeDays = null
-      if (createdUtc) {
-        const created = new Date(typeof createdUtc === 'number' ? createdUtc * 1000 : createdUtc)
-        accountAgeDays = Math.floor((Date.now() - created.getTime()) / 86400000)
+      if (user.created_utc) {
+        accountAgeDays = Math.floor((Date.now() / 1000 - user.created_utc) / 86400)
       }
+
+      const totalKarma = (user.link_karma || 0) + (user.comment_karma || 0)
 
       const snapshot = {
         account_id: account.id,
         snapshot_date: today,
-        followers: item.subscribers || item.followers || 0,
-        rd_karma_total: item.totalKarma || item.karma || item.commentKarma + item.linkKarma || 0,
+        followers: user.subreddit?.subscribers || 0,
+        rd_karma_total: user.total_karma || totalKarma,
         rd_account_age_days: accountAgeDays,
         captured_by: 'API-Reddit',
-        notes: `Auto-synced via Apify. Post karma: ${item.linkKarma || 0}, Comment karma: ${item.commentKarma || 0}`,
+        notes: `Auto-synced. Post karma: ${user.link_karma || 0}, Comment karma: ${user.comment_karma || 0}`,
       }
 
       // Check if we already have a snapshot for today
@@ -128,20 +114,13 @@ export default async function handler(req) {
           results.synced++
         }
       }
-    }
 
-    // Check for accounts that weren't found
-    const syncedHandles = results.details.map(d => d.handle.toLowerCase())
-    for (const acc of accounts) {
-      const handle = acc.handle.replace(/^u\//, '').toLowerCase()
-      if (!syncedHandles.includes(handle)) {
-        results.errors.push(`u/${handle}: not found in scraper results`)
-        results.skipped++
-      }
-    }
+      // Small delay between requests to avoid rate limiting
+      await new Promise(r => setTimeout(r, 1000))
 
-  } catch (err) {
-    results.errors.push(`Apify request failed: ${err.message}`)
+    } catch (err) {
+      results.errors.push(`u/${username}: ${err.message}`)
+    }
   }
 
   return new Response(JSON.stringify(results), {
