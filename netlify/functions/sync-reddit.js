@@ -5,9 +5,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 )
 
+const APIFY_TOKEN = process.env.APIFY_TOKEN
+
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
+  }
+
+  if (!APIFY_TOKEN) {
+    return new Response(JSON.stringify({ error: 'APIFY_TOKEN not configured' }), { status: 500 })
   }
 
   // Fetch all active Reddit accounts
@@ -28,61 +34,72 @@ export default async function handler(req) {
   const today = new Date().toISOString().split('T')[0]
   const results = { synced: 0, skipped: 0, errors: [], details: [] }
 
-  for (const account of accounts) {
-    const username = account.handle.replace(/^u\//, '')
+  // Build start URLs for all Reddit accounts
+  const startUrls = accounts.map(a => ({
+    url: `https://www.reddit.com/user/${a.handle.replace(/^u\//, '')}/`
+  }))
 
-    try {
-      // Use old.reddit.com — less restrictive with serverless IPs
-      const res = await fetch(`https://old.reddit.com/user/${username}/about.json`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; ig-dashboard/1.0; social media metrics)',
-          'Accept': 'application/json',
-        },
-      })
-
-      if (res.status === 404) {
-        results.errors.push(`u/${username}: account not found`)
-        results.skipped++
-        continue
+  try {
+    // Run trudax/reddit-scraper-lite (pay-per-usage, no rental needed)
+    const runRes = await fetch(
+      `https://api.apify.com/v2/acts/trudax~reddit-scraper-lite/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startUrls,
+          maxItems: accounts.length,
+          maxPostCount: 0,
+          maxComments: 0,
+          maxCommunitiesCount: 0,
+          maxUserCount: accounts.length,
+          scrollTimeout: 40,
+          proxy: {
+            useApifyProxy: true,
+          },
+        }),
       }
+    )
 
-      if (res.status === 403 || res.status === 429) {
-        results.errors.push(`u/${username}: rate limited or blocked (${res.status})`)
-        results.skipped++
-        continue
-      }
+    if (!runRes.ok) {
+      const errText = await runRes.text()
+      return new Response(JSON.stringify({ synced: 0, errors: [`Apify error ${runRes.status}: ${errText}`] }), { status: 200 })
+    }
 
-      if (!res.ok) {
-        results.errors.push(`u/${username}: Reddit returned ${res.status}`)
-        results.skipped++
-        continue
-      }
+    const items = await runRes.json()
 
-      const json = await res.json()
-      const user = json.data
+    for (const item of items) {
+      // Try to match by username from the scraped data
+      const username = (item.username || item.name || item.displayName || '').toLowerCase()
+      if (!username) continue
 
-      if (!user) {
-        results.errors.push(`u/${username}: no user data returned`)
-        results.skipped++
-        continue
-      }
+      const account = accounts.find(
+        a => a.handle.replace(/^u\//, '').toLowerCase() === username
+      )
+      if (!account) continue
 
       // Calculate account age in days
+      const createdUtc = item.createdAt || item.created_utc || item.created
       let accountAgeDays = null
-      if (user.created_utc) {
-        accountAgeDays = Math.floor((Date.now() / 1000 - user.created_utc) / 86400)
+      if (createdUtc) {
+        const created = new Date(typeof createdUtc === 'number' ? createdUtc * 1000 : createdUtc)
+        if (!isNaN(created.getTime())) {
+          accountAgeDays = Math.floor((Date.now() - created.getTime()) / 86400000)
+        }
       }
 
-      const totalKarma = (user.link_karma || 0) + (user.comment_karma || 0)
+      const postKarma = item.linkKarma || item.link_karma || 0
+      const commentKarma = item.commentKarma || item.comment_karma || 0
+      const totalKarma = item.totalKarma || item.total_karma || (postKarma + commentKarma)
 
       const snapshot = {
         account_id: account.id,
         snapshot_date: today,
-        followers: user.subreddit?.subscribers || 0,
-        rd_karma_total: user.total_karma || totalKarma,
+        followers: item.subscribers || item.followers || 0,
+        rd_karma_total: totalKarma,
         rd_account_age_days: accountAgeDays,
         captured_by: 'API-Reddit',
-        notes: `Auto-synced. Post karma: ${user.link_karma || 0}, Comment karma: ${user.comment_karma || 0}`,
+        notes: `Auto-synced via Apify. Post karma: ${postKarma}, Comment karma: ${commentKarma}`,
       }
 
       // Check if we already have a snapshot for today
@@ -101,7 +118,7 @@ export default async function handler(req) {
         if (upErr) {
           results.errors.push(`u/${username}: update failed — ${upErr.message}`)
         } else {
-          results.details.push({ handle: username, action: 'updated', karma: snapshot.rd_karma_total })
+          results.details.push({ handle: username, action: 'updated', karma: totalKarma })
           results.synced++
         }
       } else {
@@ -111,17 +128,24 @@ export default async function handler(req) {
         if (insErr) {
           results.errors.push(`u/${username}: insert failed — ${insErr.message}`)
         } else {
-          results.details.push({ handle: username, action: 'created', karma: snapshot.rd_karma_total })
+          results.details.push({ handle: username, action: 'created', karma: totalKarma })
           results.synced++
         }
       }
-
-      // Small delay between requests to avoid rate limiting
-      await new Promise(r => setTimeout(r, 1000))
-
-    } catch (err) {
-      results.errors.push(`u/${username}: ${err.message}`)
     }
+
+    // Check for accounts that weren't found
+    const syncedHandles = results.details.map(d => d.handle.toLowerCase())
+    for (const acc of accounts) {
+      const handle = acc.handle.replace(/^u\//, '').toLowerCase()
+      if (!syncedHandles.includes(handle)) {
+        results.errors.push(`u/${handle}: not found in scraper results`)
+        results.skipped++
+      }
+    }
+
+  } catch (err) {
+    results.errors.push(`Request failed: ${err.message}`)
   }
 
   return new Response(JSON.stringify(results), {
