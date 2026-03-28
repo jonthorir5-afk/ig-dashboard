@@ -2,7 +2,7 @@ import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, Activity, Settings, Bell, UserCircle,
-  LogOut, ChevronRight, Globe, AlertTriangle, ClipboardList, BarChart3, FileText,
+  LogOut, ChevronRight, ChevronDown, Globe, AlertTriangle, ClipboardList, BarChart3, FileText,
   Database, TestTube2
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -30,6 +30,34 @@ function NavItem({ to, icon: Icon, label, badge }) {
       <span>{label}</span>
       {badge && <span className="badge badge-primary">{badge}</span>}
     </Link>
+  )
+}
+
+function NavDropdown({ icon: Icon, label, children }) {
+  const location = useLocation()
+  const childPaths = children.map(c => c.to)
+  const isActive = childPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
+  const [open, setOpen] = useState(isActive)
+
+  return (
+    <div>
+      <button
+        className={`nav-item ${isActive ? 'active' : ''}`}
+        onClick={() => setOpen(!open)}
+        style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+      >
+        <Icon size={20} />
+        <span>{label}</span>
+        {open ? <ChevronDown size={16} style={{ marginLeft: 'auto' }} /> : <ChevronRight size={16} style={{ marginLeft: 'auto' }} />}
+      </button>
+      {open && (
+        <div style={{ paddingLeft: '1rem' }}>
+          {children.map(child => (
+            <NavItem key={child.to} to={child.to} icon={child.icon} label={child.label} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -78,8 +106,13 @@ function AppShell() {
           <nav className="sidebar-nav">
             <NavItem to="/" icon={LayoutDashboard} label="Overview" />
             <NavItem to="/models" icon={Users} label="Models" />
-            <NavItem to="/accounts" icon={Globe} label="Accounts" />
-            <NavItem to="/platforms" icon={Activity} label="Platforms" />
+            <NavDropdown icon={Globe} label="Accounts" children={[
+              { to: '/accounts', icon: Globe, label: 'All Accounts' },
+              { to: '/platforms/twitter', icon: Activity, label: 'Twitter / X' },
+              { to: '/platforms/reddit', icon: Activity, label: 'Reddit' },
+              { to: '/platforms/instagram', icon: Activity, label: 'Instagram' },
+              { to: '/platforms/tiktok', icon: Activity, label: 'TikTok' },
+            ]} />
             <NavItem to="/operators" icon={UserCircle} label="Operators" />
             <NavItem to="/data-entry" icon={ClipboardList} label="Data Entry" />
             <NavItem to="/benchmark" icon={BarChart3} label="Benchmark" />
