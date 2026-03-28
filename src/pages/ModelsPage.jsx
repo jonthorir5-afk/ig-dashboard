@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Edit2, Trash2, ChevronRight, X } from 'lucide-react'
-import { getModels, createModel, updateModel, deleteModel } from '../lib/api'
+import { Plus, Edit2, Trash2, X } from 'lucide-react'
+import { getModels, getAccounts, getLatestSnapshots, createModel, updateModel, deleteModel } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUS_OPTIONS = ['Active', 'Onboarding', 'Paused', 'Terminated']
@@ -15,9 +15,26 @@ const statusColor = (s) => {
   }
 }
 
+const PLATFORMS = [
+  { key: 'twitter', label: 'X', icon: '𝕏' },
+  { key: 'reddit', label: 'Reddit', icon: 'R' },
+  { key: 'instagram', label: 'IG', icon: 'IG' },
+  { key: 'tiktok', label: 'TikTok', icon: 'TT' },
+  { key: 'of', label: 'OF Subs', icon: 'OF' },
+]
+
+const fmt = (n) => {
+  if (n == null || n === 0) return '—'
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
+  return n.toLocaleString()
+}
+
 export default function ModelsPage() {
   const { canManage } = useAuth()
   const [models, setModels] = useState([])
+  const [accounts, setAccounts] = useState([])
+  const [snapshots, setSnapshots] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -25,9 +42,41 @@ export default function ModelsPage() {
 
   const load = () => {
     setLoading(true)
-    getModels().then(setModels).finally(() => setLoading(false))
+    Promise.all([getModels(), getAccounts(), getLatestSnapshots()])
+      .then(([m, a, s]) => { setModels(m); setAccounts(a); setSnapshots(s) })
+      .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
+
+  // Build per-model, per-platform aggregated metrics
+  const modelMetrics = useMemo(() => {
+    const metrics = {}
+    for (const model of models) {
+      metrics[model.id] = { twitter: null, reddit: null, instagram: null, tiktok: null, of: null, totalAccounts: 0 }
+      const modelAccounts = accounts.filter(a => a.model_id === model.id)
+      metrics[model.id].totalAccounts = modelAccounts.length
+
+      for (const platform of ['twitter', 'reddit', 'instagram', 'tiktok']) {
+        const platAccounts = modelAccounts.filter(a => a.platform === platform)
+        if (platAccounts.length === 0) continue
+
+        let totalFollowers = 0
+        let hasData = false
+        for (const acc of platAccounts) {
+          const snap = snapshots.find(s => s.account_id === acc.id)
+          if (snap) {
+            totalFollowers += snap.followers || 0
+            hasData = true
+          }
+        }
+        metrics[model.id][platform] = {
+          accounts: platAccounts.length,
+          followers: hasData ? totalFollowers : null,
+        }
+      }
+    }
+    return metrics
+  }, [models, accounts, snapshots])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -73,44 +122,92 @@ export default function ModelsPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-        {models.map(model => {
-          const sc = statusColor(model.status)
-          return (
-            <Link to={`/models/${model.id}`} key={model.id} className="glass-panel" style={{ padding: '1.25rem', textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem', cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ color: 'var(--text-primary)', fontSize: '1.1rem' }}>{model.display_name || model.name}</h3>
-                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600, color: sc.color, background: sc.bg }}>
-                  {model.status}
-                </span>
-              </div>
-              {model.of_username && (
-                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>OF: @{model.of_username}</p>
-              )}
-              {model.notes && (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.4 }}>{model.notes.slice(0, 100)}{model.notes.length > 100 ? '...' : ''}</p>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-                  Added {new Date(model.created_at).toLocaleDateString()}
-                </span>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {canManage && (
-                    <>
-                      <button className="icon-btn" onClick={(e) => { e.preventDefault(); handleEdit(model) }} title="Edit">
-                        <Edit2 size={14} />
-                      </button>
-                      <button className="icon-btn" onClick={(e) => { e.preventDefault(); handleDelete(model.id) }} title="Delete" style={{ color: 'var(--accent-danger)' }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                  <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />
-                </div>
-              </div>
-            </Link>
-          )
-        })}
+      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="accounts-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', minWidth: '180px' }}>Creator</th>
+                {PLATFORMS.map(p => (
+                  <th key={p.key} style={{ textAlign: 'center', minWidth: '120px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{p.icon}</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>{p.label}</span>
+                    </div>
+                  </th>
+                ))}
+                <th style={{ textAlign: 'center', minWidth: '90px' }}>Status</th>
+                {canManage && <th style={{ width: '80px' }}></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {models.map(model => {
+                const sc = statusColor(model.status)
+                const m = modelMetrics[model.id] || {}
+                return (
+                  <tr key={model.id} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <Link to={`/models/${model.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                          {model.display_name || model.name}
+                        </span>
+                        {model.of_username && (
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>OF: @{model.of_username}</span>
+                        )}
+                      </Link>
+                    </td>
+                    {PLATFORMS.map(p => {
+                      const platData = m[p.key]
+                      if (p.key === 'of') {
+                        return (
+                          <td key={p.key} style={{ textAlign: 'center' }}>
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                          </td>
+                        )
+                      }
+                      if (!platData) {
+                        return (
+                          <td key={p.key} style={{ textAlign: 'center' }}>
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                          </td>
+                        )
+                      }
+                      return (
+                        <td key={p.key} style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                              {fmt(platData.followers)}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                              {platData.accounts} acct{platData.accounts !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </td>
+                      )
+                    })}
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ padding: '0.2rem 0.6rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600, color: sc.color, background: sc.bg }}>
+                        {model.status}
+                      </span>
+                    </td>
+                    {canManage && (
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleEdit(model) }} title="Edit">
+                            <Edit2 size={14} />
+                          </button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDelete(model.id) }} title="Delete" style={{ color: 'var(--accent-danger)' }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {models.length === 0 && (
