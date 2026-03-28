@@ -20,20 +20,22 @@ import BenchmarkPage from './pages/BenchmarkPage'
 import WeeklyDigestPage from './pages/WeeklyDigestPage'
 import './App.css'
 
-function NavItem({ to, icon: Icon, label, badge }) {
+function NavItem({ to, icon: Icon, label, badge, nested, exact }) {
   const location = useLocation()
-  const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to))
+  const isActive = exact
+    ? location.pathname === to
+    : location.pathname === to || (to !== '/' && location.pathname.startsWith(to + '/'))
 
   return (
-    <Link to={to} className={`nav-item ${isActive ? 'active' : ''}`}>
-      <Icon size={20} />
+    <Link to={to} className={`nav-item ${isActive ? 'active' : ''} ${nested ? 'nav-nested' : ''}`}>
+      <Icon size={nested ? 16 : 20} />
       <span>{label}</span>
       {badge && <span className="badge badge-primary">{badge}</span>}
     </Link>
   )
 }
 
-function NavDropdown({ icon: Icon, label, children }) {
+function NavDropdown({ icon: Icon, label, children, nested }) {
   const location = useLocation()
   const getAllPaths = (items) => {
     let paths = []
@@ -50,21 +52,21 @@ function NavDropdown({ icon: Icon, label, children }) {
   return (
     <div>
       <button
-        className={`nav-item ${isActive ? 'active' : ''}`}
+        className={`nav-item ${isActive ? 'active' : ''} ${nested ? 'nav-nested' : ''}`}
         onClick={() => setOpen(!open)}
         style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
       >
-        <Icon size={20} />
+        <Icon size={nested ? 16 : 20} />
         <span>{label}</span>
-        {open ? <ChevronDown size={16} style={{ marginLeft: 'auto' }} /> : <ChevronRight size={16} style={{ marginLeft: 'auto' }} />}
+        {open ? <ChevronDown size={14} style={{ marginLeft: 'auto' }} /> : <ChevronRight size={14} style={{ marginLeft: 'auto' }} />}
       </button>
       {open && (
-        <div style={{ paddingLeft: '1rem' }}>
+        <div style={{ paddingLeft: nested ? '0.75rem' : '0' }}>
           {children.map(child =>
             child.children ? (
-              <NavDropdown key={child.label} icon={child.icon} label={child.label} children={child.children} />
+              <NavDropdown key={child.label} icon={child.icon} label={child.label} children={child.children} nested />
             ) : (
-              <NavItem key={child.to} to={child.to} icon={child.icon} label={child.label} />
+              <NavItem key={child.to} to={child.to} icon={child.icon} label={child.label} nested exact={child.exact} />
             )
           )}
         </div>
@@ -129,6 +131,7 @@ function AppShell() {
             <NavItem to="/data-entry" icon={ClipboardList} label="Data Entry" />
             <NavDropdown icon={BarChart3} label="Analytics" children={[
               { icon: BarChart3, label: 'Benchmark', children: [
+                { to: '/benchmark', icon: BarChart3, label: 'All Platforms', exact: true },
                 { to: '/benchmark/twitter', icon: Activity, label: 'Twitter / X' },
                 { to: '/benchmark/reddit', icon: Activity, label: 'Reddit' },
                 { to: '/benchmark/instagram', icon: Activity, label: 'Instagram' },
@@ -166,7 +169,7 @@ function AppShell() {
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/models/:id" element={<ModelDetailPage />} />
               <Route path="/accounts" element={<AccountsPage />} />
-              <Route path="/platforms" element={<PlatformPage />} />
+              <Route path="/platforms" element={<Navigate to="/accounts" />} />
               <Route path="/platforms/:platform" element={<PlatformPage />} />
               <Route path="/operators" element={<OperatorsPage />} />
               <Route path="/data-entry" element={<DataEntryPage />} />
