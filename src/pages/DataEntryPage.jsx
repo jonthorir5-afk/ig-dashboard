@@ -296,6 +296,15 @@ export default function DataEntryPage() {
               <RefreshCw size={16} className={syncing ? 'spin' : ''} />
               {syncing ? 'Syncing...' : 'Sync Twitter/X'}
             </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleApiSync('reddit')}
+              disabled={syncing}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync Reddit'}
+            </button>
           </div>
 
           {syncResults && (
@@ -317,7 +326,7 @@ export default function DataEntryPage() {
                     <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
                       {syncResults.details.map((d, i) => (
                         <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
-                          @{d.handle} — {d.action}, {d.followers?.toLocaleString()} followers
+                          @{d.handle} — {d.action}, {d.followers != null ? `${d.followers.toLocaleString()} followers` : d.karma != null ? `${d.karma.toLocaleString()} karma` : ''}
                         </div>
                       ))}
                     </div>

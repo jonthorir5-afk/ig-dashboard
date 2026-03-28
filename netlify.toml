@@ -6,6 +6,10 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[functions."sync-reddit"]
+  external_node_modules = ["@supabase/supabase-js"]
+  timeout = 120
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
