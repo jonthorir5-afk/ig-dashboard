@@ -190,7 +190,7 @@ export default async function handler(req) {
 
     return new Response(JSON.stringify({
       ...results,
-      details: results.errors.length ? results.errors : [`Synced ${results.synced} links successfully.`],
+      details: [...modelUpdates, ...(results.errors.length ? results.errors : [`Synced ${results.synced} links successfully.`])],
       modelUpdates
     }), {
       status: 200,
