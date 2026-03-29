@@ -86,34 +86,26 @@ export default async function handler(req) {
     }
 
     // Sync mode: match tracking links to models
-    const { data: models } = await supabase
-      .from('models')
-      .select('id, name, display_name, of_username')
-      .eq('status', 'Active')
+    const { data: mappings } = await supabase
+      .from('of_link_mappings')
+      .select('tracking_link_name, model_id, account_id')
+
+    const { data: models } = await supabase.from('models').select('id, name')
+    const { data: accounts } = await supabase.from('accounts').select('id, handle')
 
     const today = new Date().toISOString().split('T')[0]
     const results = { synced: 0, skipped: 0, errors: [...accountErrors], details: [], unmapped: [] }
 
     for (const link of allTrackingLinks) {
-      const linkName = (link.campaignName || link.name || link.label || '').toLowerCase()
-      const linkUrl = (link.campaignUrl || link.url || link.link || '').toLowerCase()
+      const linkName = link.campaignName || link.name || link.label || ''
+      const linkUrl = link.campaignUrl || link.url || link.link || ''
 
-      const model = models?.find(m => {
-        const name = (m.name || '').toLowerCase()
-        const displayName = (m.display_name || '').toLowerCase()
-        const ofUser = (m.of_username || '').toLowerCase()
-        return (
-          linkName.includes(name) ||
-          linkName.includes(displayName) ||
-          (ofUser && linkName.includes(ofUser)) ||
-          (ofUser && linkUrl.includes(ofUser))
-        )
-      })
+      const mapping = mappings?.find(m => m.tracking_link_name === linkName)
 
-      if (!model) {
+      if (!mapping) {
         results.unmapped.push({
-          name: link.campaignName || link.name || link.label,
-          url: link.campaignUrl || link.url || link.link,
+          name: linkName,
+          url: linkUrl,
           clicks: link.clicksCount || link.clicks || 0,
           subscribers: link.subscribersCount || link.subscribers || 0,
           revenue: link.revenue?.total || link.revenueTotal || 0,
@@ -122,21 +114,8 @@ export default async function handler(req) {
         continue
       }
 
-      // Try to match to a specific social media account
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('id, handle, platform')
-        .eq('model_id', model.id)
-
-      let matchedAccount = null
-      for (const acc of (accounts || [])) {
-        const handle = acc.handle.toLowerCase()
-        const platform = acc.platform.toLowerCase()
-        if (linkName.includes(handle) || linkName.includes(platform)) {
-          matchedAccount = acc
-          break
-        }
-      }
+      const model = models?.find(m => m.id === mapping.model_id) || { name: 'Unknown' }
+      const matchedAccount = accounts?.find(a => a.id === mapping.account_id)
 
       const clicks = link.clicksCount || link.clicks || 0
       const subscribers = link.subscribersCount || link.subscribers || 0
@@ -144,10 +123,10 @@ export default async function handler(req) {
       const totalRevenue = revenueData.total || link.revenueTotal || 0
 
       const trackingRecord = {
-        model_id: model.id,
-        account_id: matchedAccount?.id || null,
-        tracking_link_name: link.campaignName || link.name || link.label,
-        tracking_link_url: link.campaignUrl || link.url || link.link,
+        model_id: mapping.model_id,
+        account_id: mapping.account_id || null,
+        tracking_link_name: linkName,
+        tracking_link_url: linkUrl,
         snapshot_date: today,
         clicks,
         subscribers,
