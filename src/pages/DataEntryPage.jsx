@@ -804,10 +804,15 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
   const handleChange = (e) => {
     const val = e.target.value
     setText(val)
-    const linkDetails = ofLinks.find(l => l.name === val || l.url === val)
+    const linkDetails = ofLinks.find(l => {
+      const lName = l.campaignName || l.name || l.label
+      const lUrl = l.campaignUrl || l.url || l.link
+      return lName === val || lUrl === val
+    })
     if (linkDetails) {
-      setText(linkDetails.name) // Auto-correct to Link Name so they know it worked
-      onSave(linkDetails.name, linkDetails)
+      const lName = linkDetails.campaignName || linkDetails.name || linkDetails.label
+      setText(lName)
+      onSave(lName, linkDetails)
     }
   }
 
@@ -821,11 +826,15 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
         style={inputStyle}
       />
       <datalist id={`ofLinksList-${acc.id}`}>
-        {ofLinks.map((l, i) => (
-          <option key={i} value={l.name}>
-            {l.url ? `${l.url}` : ''}
-          </option>
-        ))}
+        {ofLinks.map((l, i) => {
+          const lName = l.campaignName || l.name || l.label || ''
+          const lUrl = l.campaignUrl || l.url || l.link || ''
+          return (
+            <option key={i} value={lName}>
+              {lUrl}
+            </option>
+          )
+        })}
       </datalist>
     </>
   )
