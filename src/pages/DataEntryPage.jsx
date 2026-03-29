@@ -804,8 +804,11 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
   const handleChange = (e) => {
     const val = e.target.value
     setText(val)
-    const linkDetails = ofLinks.find(l => l.name === val)
-    if (linkDetails) onSave(val, linkDetails)
+    const linkDetails = ofLinks.find(l => l.name === val || l.url === val)
+    if (linkDetails) {
+      setText(linkDetails.name) // Auto-correct to Link Name so they know it worked
+      onSave(linkDetails.name, linkDetails)
+    }
   }
 
   return (
