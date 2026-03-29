@@ -323,25 +323,88 @@ export default function DataEntryPage() {
               <div style={{
                 padding: '1rem',
                 borderRadius: '8px',
-                background: syncResults.errors?.length && !syncResults.synced ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
-                border: `1px solid ${syncResults.errors?.length && !syncResults.synced ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
+                background: syncResults.errors?.length && !syncResults.synced && !syncResults.trackingLinks ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                border: `1px solid ${syncResults.errors?.length && !syncResults.synced && !syncResults.trackingLinks ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
               }}>
-                <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                  {syncResults.synced > 0 ? `Synced ${syncResults.synced} account${syncResults.synced !== 1 ? 's' : ''}` : 'Sync complete'}
-                  {syncResults.skipped > 0 && `, ${syncResults.skipped} skipped`}
-                </p>
+                {/* Discover mode results */}
+                {syncResults.action === 'discover' && (
+                  <>
+                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                      OnlyFans Discovery: {syncResults.trackingLinks?.length || 0} tracking link(s) found
+                    </p>
+                    {syncResults.connectedAccounts?.length > 0 && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                        Connected accounts: {syncResults.connectedAccounts.map(a => a.name || a.id).join(', ')}
+                      </p>
+                    )}
+                    {syncResults.trackingLinks?.length > 0 && (
+                      <div style={{ maxHeight: '300px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                              <th style={{ padding: '6px 8px' }}>Link Name</th>
+                              <th style={{ padding: '6px 8px' }}>Clicks</th>
+                              <th style={{ padding: '6px 8px' }}>Subs</th>
+                              <th style={{ padding: '6px 8px' }}>Revenue</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {syncResults.trackingLinks.map((l, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                <td style={{ padding: '6px 8px' }}>{l.name}</td>
+                                <td style={{ padding: '6px 8px' }}>{(l.clicks || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 8px' }}>{(l.subscribers || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 8px' }}>${(l.revenue || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {syncResults.trackingLinks?.length > 0 && (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>
+                        This is discovery mode — data is not saved yet. Review the links above, then use full sync to save.
+                      </p>
+                    )}
+                  </>
+                )}
 
-                {syncResults.details?.length > 0 && (
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Details:</p>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
-                      {syncResults.details.map((d, i) => (
-                        <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
-                          @{d.handle} — {d.action}, {d.followers != null ? `${d.followers.toLocaleString()} followers` : d.karma != null ? `${d.karma.toLocaleString()} karma` : ''}
+                {/* Normal sync results */}
+                {syncResults.action !== 'discover' && (
+                  <>
+                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                      {syncResults.synced > 0 ? `Synced ${syncResults.synced} account${syncResults.synced !== 1 ? 's' : ''}` : 'Sync complete'}
+                      {syncResults.skipped > 0 && `, ${syncResults.skipped} skipped`}
+                    </p>
+
+                    {syncResults.details?.length > 0 && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Details:</p>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                          {syncResults.details.map((d, i) => (
+                            <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
+                              {d.handle ? `@${d.handle} — ${d.action}, ` : ''}
+                              {d.followers != null ? `${d.followers.toLocaleString()} followers` : d.karma != null ? `${d.karma.toLocaleString()} karma` : ''}
+                              {d.link ? `${d.model}: ${d.link} — ${d.clicks} clicks, ${d.subscribers} subs, $${d.revenue}` : ''}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
+                    )}
+
+                    {syncResults.unmapped?.length > 0 && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Unmapped links (no model match):</p>
+                        <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                          {syncResults.unmapped.map((u, i) => (
+                            <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)', color: 'var(--text-tertiary)' }}>
+                              {u.name} — {u.clicks} clicks, {u.subscribers} subs, ${u.revenue}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {syncResults.errors?.length > 0 && (
