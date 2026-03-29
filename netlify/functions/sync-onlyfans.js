@@ -103,20 +103,25 @@ export default async function handler(req) {
       .select('tracking_link_name, model_id, account_id')
 
     const { data: models } = await supabase.from('models').select('id, name, of_username')
+    const modelUpdates = []
     
     // Sync master OF Account subscribers
     for (const model of models || []) {
-      if (!model.of_username) continue
+      if (!model.of_username) { modelUpdates.push(`Skipped ${model.name}: no of_username`); continue; }
       const dbName = model.of_username.toLowerCase().replace(/[^a-z0-9]/g, '')
       const matchedOfAcct = ofAccounts.find(a => {
         const apiUser = (a.onlyfans_username || a.onlyfans_user_data?.username || '').toLowerCase().replace(/[^a-z0-9]/g, '')
         const apiName = (a.display_name || a.onlyfans_user_data?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-        return apiUser.includes(dbName) || apiName.includes(dbName) || dbName.includes(apiUser)
+        return (apiUser && apiUser.includes(dbName)) || (apiName && apiName.includes(dbName)) || (dbName && dbName.includes(apiUser))
       })
       if (matchedOfAcct) {
         const userData = matchedOfAcct.onlyfans_user_data || matchedOfAcct
         const totalSubs = userData.subscribersCount || userData.activeSubscribersCount || userData.subscribers || userData.subscriberCount || 0
-        await supabase.from('models').update({ of_subs: totalSubs }).eq('id', model.id)
+        const { error } = await supabase.from('models').update({ of_subs: totalSubs }).eq('id', model.id)
+        if (error) modelUpdates.push(`DB ERROR ${model.name}: ${error.message}`)
+        else modelUpdates.push(`Matched ${model.name} to ${matchedOfAcct.display_name}. Updated to ${totalSubs} subs.`)
+      } else {
+        modelUpdates.push(`No match found for ${model.name} using of_username ${model.of_username}`)
       }
     }
 
@@ -183,7 +188,11 @@ export default async function handler(req) {
       }
     }
 
-    return new Response(JSON.stringify(results), {
+    return new Response(JSON.stringify({
+      ...results,
+      details: results.errors.length ? results.errors : [`Synced ${results.synced} links successfully.`],
+      modelUpdates
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
