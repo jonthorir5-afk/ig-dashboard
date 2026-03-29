@@ -55,11 +55,13 @@ export default async function handler(req) {
       if (!acctId) continue
       try {
         const tlRes = await ofFetch(`/${acctId}/tracking-links`)
-        const links = tlRes.data || tlRes
+        let links = tlRes.data || tlRes
+        if (links && Array.isArray(links.list)) links = links.list
+        
         if (Array.isArray(links)) {
           allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
         } else {
-          accountErrors.push(`${acctId} JSON: ${JSON.stringify(links).slice(0, 150)}`)
+          accountErrors.push(`${acctId}: Unexpected response format (no tracking links array found)`)
         }
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
