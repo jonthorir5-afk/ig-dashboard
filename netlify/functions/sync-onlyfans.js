@@ -54,14 +54,26 @@ export default async function handler(req) {
       const acctId = ofAcct.id || ofAcct.account_id
       if (!acctId) continue
       try {
-        const tlRes = await ofFetch(`/${acctId}/tracking-links`)
-        let links = tlRes.data || tlRes
-        if (links && Array.isArray(links.list)) links = links.list
+        let hasMore = true
+        let offset = 0
+        const limit = 100
         
-        if (Array.isArray(links)) {
-          allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
-        } else {
-          accountErrors.push(`${acctId}: Unexpected response format (no tracking links array found)`)
+        while (hasMore) {
+          const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=${limit}&offset=${offset}`)
+          let links = tlRes.data || tlRes
+          if (links && Array.isArray(links.list)) links = links.list
+          
+          if (Array.isArray(links)) {
+            if (links.length === 0) {
+              hasMore = false
+            } else {
+              allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
+              offset += limit
+            }
+          } else {
+            if (offset === 0) accountErrors.push(`${acctId}: Unexpected response format (no tracking links array found)`)
+            hasMore = false
+          }
         }
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
