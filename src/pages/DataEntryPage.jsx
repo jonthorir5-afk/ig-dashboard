@@ -819,7 +819,7 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
       setText(lName)
       onSave(lName, linkDetails)
     } else if (val.includes('onlyfans.com') && val.length > 25) {
-      console.warn('URL pasted but NOT FOUND in the 90 OnlyFans tracking links: ', val)
+      console.warn('URL pasted but NOT FOUND natively in the API downloaded tracking links: ', val)
     }
   }
 

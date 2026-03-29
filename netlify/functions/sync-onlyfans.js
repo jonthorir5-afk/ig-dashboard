@@ -50,13 +50,13 @@ export default async function handler(req) {
     let allTrackingLinks = []
     const accountErrors = []
 
-    for (const ofAcct of ofAccounts) {
+    await Promise.all(ofAccounts.map(async (ofAcct) => {
       const acctId = ofAcct.id || ofAcct.account_id
-      if (!acctId) continue
+      if (!acctId) return
       try {
         let hasMore = true
         let offset = 0
-        const limit = 100
+        const limit = 1000
         
         while (hasMore) {
           const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=${limit}&offset=${offset}`)
@@ -68,7 +68,7 @@ export default async function handler(req) {
               hasMore = false
             } else {
               allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
-              offset += limit
+              offset += links.length
             }
           } else {
             if (offset === 0) accountErrors.push(`${acctId}: Unexpected response format (no tracking links array found)`)
@@ -78,7 +78,7 @@ export default async function handler(req) {
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
       }
-    }
+    }))
 
     if (action === 'discover') {
       return new Response(JSON.stringify({
