@@ -58,6 +58,8 @@ export default async function handler(req) {
         const links = tlRes.data || tlRes
         if (Array.isArray(links)) {
           allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
+        } else {
+          accountErrors.push(`${acctId} JSON: ${JSON.stringify(links).slice(0, 150)}`)
         }
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
