@@ -22,12 +22,22 @@ export default function ExecOverview() {
   // Per-model, per-platform follower totals for the summary table
   const modelPlatformTable = useMemo(() => {
     if (!data) return []
-    const { models, accounts, snapshots: snaps } = data
+    const { models, accounts, snapshots: snaps, ofTracking } = data
     // Build latest snapshot per account
     const latestSnap = {}
     for (const s of snaps) {
       if (!latestSnap[s.account_id] || s.snapshot_date > latestSnap[s.account_id].snapshot_date) {
         latestSnap[s.account_id] = s
+      }
+    }
+    // Build latest ofTracking per tracking link
+    const latestOfTracking = {}
+    if (ofTracking) {
+      for (const t of ofTracking) {
+        const key = `${t.model_id}_${t.tracking_link_name}`
+        if (!latestOfTracking[key] || t.snapshot_date > latestOfTracking[key].snapshot_date) {
+          latestOfTracking[key] = t
+        }
       }
     }
     return models
@@ -46,6 +56,18 @@ export default function ExecOverview() {
           }
           row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
         }
+        
+        let totalOfSubs = 0
+        let hasOfData = false
+        if (ofTracking) {
+           const modelOf = Object.values(latestOfTracking).filter(t => t.model_id === model.id)
+           if (modelOf.length > 0) {
+             hasOfData = true
+             totalOfSubs = modelOf.reduce((sum, t) => sum + (t.subscribers || 0), 0)
+           }
+        }
+        row.of_subs = hasOfData ? totalOfSubs : null
+        
         return row
       })
   }, [data])
@@ -353,7 +375,13 @@ export default function ExecOverview() {
                       </td>
                     ))}
                     <td style={{ textAlign: 'center' }}>
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                      {row.of_subs != null ? (
+                         <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                           {formatNumber(row.of_subs)}
+                         </span>
+                      ) : (
+                         <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
