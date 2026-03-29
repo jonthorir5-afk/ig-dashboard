@@ -307,6 +307,15 @@ export default function DataEntryPage() {
               <RefreshCw size={16} className={syncing ? 'spin' : ''} />
               {syncing ? 'Syncing...' : 'Sync Reddit'}
             </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleApiSync('onlyfans')}
+              disabled={syncing}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync OnlyFans'}
+            </button>
           </div>
 
           {syncResults && (
