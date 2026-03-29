@@ -31,48 +31,69 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'ONLYFANS_API_KEY not configured' }), { status: 500 })
   }
 
-  // Check what action is requested
   let body = {}
   try { body = await req.json() } catch {}
-  const action = body.action || 'sync'
+  const action = body.action || 'discover'
 
   try {
+    // Step 1: Get connected OF accounts
+    const accountsRes = await ofFetch('/accounts')
+    const ofAccounts = accountsRes.data || accountsRes
+    if (!Array.isArray(ofAccounts) || ofAccounts.length === 0) {
+      return new Response(JSON.stringify({
+        error: 'No OnlyFans accounts connected in OnlyFansAPI. Connect an account at app.onlyfansapi.com first.',
+        raw: accountsRes,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    // Collect tracking links from all connected accounts
+    let allTrackingLinks = []
+    const accountErrors = []
+
+    for (const ofAcct of ofAccounts) {
+      const acctId = ofAcct.id || ofAcct.account_id
+      if (!acctId) continue
+      try {
+        const tlRes = await ofFetch(`/${acctId}/tracking-links`)
+        const links = tlRes.data || tlRes
+        if (Array.isArray(links)) {
+          allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
+        }
+      } catch (err) {
+        accountErrors.push(`${acctId}: ${err.message}`)
+      }
+    }
+
     if (action === 'discover') {
-      // Discovery mode: just fetch and return tracking links so user can see the data
-      const data = await ofFetch('/tracking-links')
       return new Response(JSON.stringify({
         action: 'discover',
-        trackingLinks: data.data || data,
-        _meta: data._meta || null,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
+        connectedAccounts: ofAccounts.map(a => ({ id: a.id || a.account_id, name: a.name || a.username })),
+        trackingLinks: allTrackingLinks.map(l => ({
+          ofAccount: l._ofAccountName,
+          name: l.campaignName || l.name || l.label,
+          code: l.campaignCode || l.code,
+          url: l.campaignUrl || l.url || l.link,
+          clicks: l.clicksCount || l.clicks || 0,
+          subscribers: l.subscribersCount || l.subscribers || 0,
+          revenue: l.revenue?.total || l.revenueTotal || 0,
+        })),
+        accountErrors,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
-    // Sync mode: fetch tracking links and match to models
-    const [trackingRes, { data: models }] = await Promise.all([
-      ofFetch('/tracking-links'),
-      supabase.from('models').select('id, name, display_name, of_username').eq('status', 'Active'),
-    ])
-
-    const trackingLinks = trackingRes.data || trackingRes
-    if (!Array.isArray(trackingLinks)) {
-      return new Response(JSON.stringify({
-        error: 'Unexpected tracking links response',
-        raw: trackingLinks,
-      }), { status: 200 })
-    }
+    // Sync mode: match tracking links to models
+    const { data: models } = await supabase
+      .from('models')
+      .select('id, name, display_name, of_username')
+      .eq('status', 'Active')
 
     const today = new Date().toISOString().split('T')[0]
-    const results = { synced: 0, skipped: 0, errors: [], details: [], unmapped: [] }
+    const results = { synced: 0, skipped: 0, errors: [...accountErrors], details: [], unmapped: [] }
 
-    // Try to match each tracking link to a model by name/label
-    for (const link of trackingLinks) {
-      const linkName = (link.name || link.label || '').toLowerCase()
-      const linkUrl = (link.url || link.link || '').toLowerCase()
+    for (const link of allTrackingLinks) {
+      const linkName = (link.campaignName || link.name || link.label || '').toLowerCase()
+      const linkUrl = (link.campaignUrl || link.url || link.link || '').toLowerCase()
 
-      // Try matching by model name, display_name, or of_username
       const model = models?.find(m => {
         const name = (m.name || '').toLowerCase()
         const displayName = (m.display_name || '').toLowerCase()
@@ -87,8 +108,8 @@ export default async function handler(req) {
 
       if (!model) {
         results.unmapped.push({
-          name: link.name || link.label,
-          url: link.url || link.link,
+          name: link.campaignName || link.name || link.label,
+          url: link.campaignUrl || link.url || link.link,
           clicks: link.clicksCount || link.clicks || 0,
           subscribers: link.subscribersCount || link.subscribers || 0,
           revenue: link.revenue?.total || link.revenueTotal || 0,
@@ -97,13 +118,12 @@ export default async function handler(req) {
         continue
       }
 
-      // Get accounts for this model to find the right one
+      // Try to match to a specific social media account
       const { data: accounts } = await supabase
         .from('accounts')
         .select('id, handle, platform')
         .eq('model_id', model.id)
 
-      // Try to match the tracking link to a specific account by platform in the link name
       let matchedAccount = null
       for (const acc of (accounts || [])) {
         const handle = acc.handle.toLowerCase()
@@ -119,13 +139,11 @@ export default async function handler(req) {
       const revenueData = link.revenue || {}
       const totalRevenue = revenueData.total || link.revenueTotal || 0
 
-      // Store as a snapshot note or update existing snapshot
-      // For now, store at the model level in a dedicated tracking record
       const trackingRecord = {
         model_id: model.id,
         account_id: matchedAccount?.id || null,
-        tracking_link_name: link.name || link.label,
-        tracking_link_url: link.url || link.link,
+        tracking_link_name: link.campaignName || link.name || link.label,
+        tracking_link_url: link.campaignUrl || link.url || link.link,
         snapshot_date: today,
         clicks,
         subscribers,
@@ -134,18 +152,16 @@ export default async function handler(req) {
         revenue_per_click: revenueData.revenuePerClick || 0,
       }
 
-      // Upsert into of_tracking table
       const { error: upsertErr } = await supabase
         .from('of_tracking')
         .upsert(trackingRecord, { onConflict: 'model_id,tracking_link_name,snapshot_date' })
 
       if (upsertErr) {
-        // Table might not exist yet — store in notes instead
-        results.errors.push(`${model.name} (${link.name}): ${upsertErr.message}`)
+        results.errors.push(`${model.name} (${link.campaignName || link.name}): ${upsertErr.message}`)
       } else {
         results.details.push({
           model: model.name,
-          link: link.name || link.label,
+          link: link.campaignName || link.name || link.label,
           account: matchedAccount ? `@${matchedAccount.handle}` : null,
           clicks,
           subscribers,
