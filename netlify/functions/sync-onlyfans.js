@@ -77,7 +77,7 @@ export default async function handler(req) {
           subscribers: l.subscribersCount || l.subscribers || 0,
           revenue: l.revenue?.total || l.revenueTotal || 0,
         })),
-        accountErrors,
+        errors: accountErrors,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
