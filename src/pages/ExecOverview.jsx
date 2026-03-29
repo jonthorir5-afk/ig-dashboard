@@ -95,6 +95,20 @@ export default function ExecOverview() {
     const reachTrend = prevReach ? ((totalReach - prevReach) / prevReach * 100).toFixed(1) : null
     const clicksTrend = prevClicks ? ((totalClicks - prevClicks) / prevClicks * 100).toFixed(1) : null
 
+    // Per-platform reach
+    const platformReach = {}
+    for (const p of ['twitter', 'reddit', 'instagram', 'tiktok']) {
+      const platAccountIds = new Set(accounts.filter(a => a.platform === p).map(a => a.id))
+      const platLatest = latestArr.filter(s => platAccountIds.has(s.account_id))
+      const platPrev = prevArr.filter(s => platAccountIds.has(s.account_id))
+      const reach = platLatest.reduce((sum, s) => sum + getSnapshotViews(s), 0)
+      const prevR = platPrev.reduce((sum, s) => sum + getSnapshotViews(s), 0)
+      platformReach[p] = {
+        reach,
+        trend: prevR ? ((reach - prevR) / prevR * 100).toFixed(1) : null,
+      }
+    }
+
     // Top & bottom models by reach
     const modelReach = {}
     for (const s of latestArr) {
@@ -129,6 +143,7 @@ export default function ExecOverview() {
       missingData,
       latestSnapshots: latestArr,
       modelRanking,
+      platformReach,
     }
   }, [data])
 
@@ -242,18 +257,31 @@ export default function ExecOverview() {
         />
       </div>
 
-      {/* Platform breakdown */}
+      {/* Per-platform reach */}
       <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        {['instagram', 'twitter', 'reddit', 'tiktok'].map(p => (
-          <Link to={`/platforms/${p}`} key={p} className="metric-card glass-panel" style={{ textDecoration: 'none', cursor: 'pointer' }}>
-            <div className="metric-data">
-              <p className="metric-label" style={{ textTransform: 'capitalize' }}>{p === 'twitter' ? 'Twitter / X' : p}</p>
-              <h3 className="metric-value">{stats.platformCounts[p] || 0}</h3>
-              <span className="metric-text">accounts</span>
-            </div>
-            <ChevronRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
-          </Link>
-        ))}
+        {[
+          { key: 'twitter', label: 'Twitter / X', icon: '𝕏' },
+          { key: 'reddit', label: 'Reddit', icon: 'R' },
+          { key: 'instagram', label: 'Instagram', icon: 'IG' },
+          { key: 'tiktok', label: 'TikTok', icon: 'TT' },
+        ].map(p => {
+          const pr = stats.platformReach[p.key] || {}
+          return (
+            <Link to={`/platforms/${p.key}`} key={p.key} className="metric-card glass-panel" style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <div className="metric-data">
+                <p className="metric-label">{p.label}</p>
+                <h3 className="metric-value">{formatNumber(pr.reach || 0)}</h3>
+                <span className="metric-text">{stats.platformCounts[p.key] || 0} accounts</span>
+                {pr.trend != null && (
+                  <span className={`metric-trend ${Number(pr.trend) >= 0 ? 'positive' : 'negative'}`}>
+                    {Number(pr.trend) >= 0 ? '+' : ''}{pr.trend}% vs last week
+                  </span>
+                )}
+              </div>
+              <ChevronRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
+            </Link>
+          )
+        })}
       </div>
 
       {/* Model × Platform Table */}
