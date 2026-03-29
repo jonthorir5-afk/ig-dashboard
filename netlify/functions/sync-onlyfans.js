@@ -102,7 +102,21 @@ export default async function handler(req) {
       .from('of_link_mappings')
       .select('tracking_link_name, model_id, account_id')
 
-    const { data: models } = await supabase.from('models').select('id, name')
+    const { data: models } = await supabase.from('models').select('id, name, of_username')
+    
+    // Sync master OF Account subscribers
+    for (const model of models || []) {
+      if (!model.of_username) continue
+      const matchedOfAcct = ofAccounts.find(a => 
+        (a.username || '').toLowerCase() === model.of_username.toLowerCase() ||
+        (a.name || '').toLowerCase() === model.of_username.toLowerCase()
+      )
+      if (matchedOfAcct) {
+        const totalSubs = matchedOfAcct.subscribersCount || matchedOfAcct.subscribers || matchedOfAcct.subscriberCount || 0
+        await supabase.from('models').update({ of_subs: totalSubs }).eq('id', model.id)
+      }
+    }
+
     const { data: accounts } = await supabase.from('accounts').select('id, handle')
 
     const today = new Date().toISOString().split('T')[0]
