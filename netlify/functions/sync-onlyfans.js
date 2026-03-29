@@ -56,7 +56,7 @@ export default async function handler(req) {
       try {
         let hasMore = true
         let offset = 0
-        const limit = 1000
+        const limit = 100
         
         while (hasMore) {
           const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=${limit}&offset=${offset}`)
