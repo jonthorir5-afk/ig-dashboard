@@ -2,8 +2,8 @@
 -- Stores daily snapshots of clicks, subscribers, and revenue per tracking link
 CREATE TABLE IF NOT EXISTS of_tracking (
   id uuid primary key default gen_random_uuid(),
-  model_id uuid not null references models(id) on delete cascade,
-  account_id uuid references accounts(id) on delete set null,
+  model_id uuid not null,
+  account_id uuid,
   tracking_link_name text not null,
   tracking_link_url text,
   snapshot_date date not null default current_date,
