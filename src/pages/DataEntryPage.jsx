@@ -804,15 +804,22 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
   const handleChange = (e) => {
     const val = e.target.value
     setText(val)
+    
+    const cleanVal = val.toLowerCase().trim().replace(/\/$/, '')
+    
     const linkDetails = ofLinks.find(l => {
-      const lName = l.campaignName || l.name || l.label
-      const lUrl = l.campaignUrl || l.url || l.link
-      return lName === val || lUrl === val
+      const lName = (l.campaignName || l.name || l.label || '').toLowerCase().trim()
+      const lUrl = (l.campaignUrl || l.url || l.link || '').toLowerCase().trim().replace(/\/$/, '')
+      
+      return lName === cleanVal || lUrl === cleanVal || (cleanVal.includes('onlyfans.com') && lUrl.includes(cleanVal))
     })
+    
     if (linkDetails) {
       const lName = linkDetails.campaignName || linkDetails.name || linkDetails.label
       setText(lName)
       onSave(lName, linkDetails)
+    } else if (val.includes('onlyfans.com') && val.length > 25) {
+      console.warn('URL pasted but NOT FOUND in the 90 OnlyFans tracking links: ', val)
     }
   }
 
