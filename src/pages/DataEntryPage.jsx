@@ -69,6 +69,7 @@ export default function DataEntryPage() {
             body: JSON.stringify({ action: 'discover' }) 
           })
           const data = await res.json()
+          if (data.connectedAccounts) console.warn('OF ACCOUNTS DEBUG:', data.connectedAccounts)
           if (data.trackingLinks) setOfLinks(data.trackingLinks)
         } catch (e) {
           console.error(e)

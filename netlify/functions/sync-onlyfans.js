@@ -83,7 +83,7 @@ export default async function handler(req) {
     if (action === 'discover') {
       return new Response(JSON.stringify({
         action: 'discover',
-        connectedAccounts: ofAccounts.map(a => ({ id: a.id || a.account_id, name: a.name || a.username })),
+        connectedAccounts: ofAccounts.map(a => ({ id: a.id || a.account_id, name: a.name || a.username, rawAccount: a })),
         trackingLinks: allTrackingLinks.map(l => ({
           ofAccount: l._ofAccountName,
           name: l.campaignName || l.name || l.label,
@@ -107,12 +107,15 @@ export default async function handler(req) {
     // Sync master OF Account subscribers
     for (const model of models || []) {
       if (!model.of_username) continue
-      const matchedOfAcct = ofAccounts.find(a => 
-        (a.username || '').toLowerCase() === model.of_username.toLowerCase() ||
-        (a.name || '').toLowerCase() === model.of_username.toLowerCase()
-      )
+      const dbName = model.of_username.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const matchedOfAcct = ofAccounts.find(a => {
+        const apiUser = (a.username || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        const apiName = (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        return apiUser.includes(dbName) || apiName.includes(dbName) || dbName.includes(apiUser)
+      })
       if (matchedOfAcct) {
-        const totalSubs = matchedOfAcct.subscribersCount || matchedOfAcct.subscribers || matchedOfAcct.subscriberCount || 0
+        // also try a bunch of typical OnlyFans API properties for subs
+        const totalSubs = matchedOfAcct.subscribersCount || matchedOfAcct.activeSubscribersCount || matchedOfAcct.subscribers || matchedOfAcct.subscriberCount || 0
         await supabase.from('models').update({ of_subs: totalSubs }).eq('id', model.id)
       }
     }
