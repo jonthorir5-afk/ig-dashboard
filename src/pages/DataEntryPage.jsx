@@ -342,15 +342,11 @@ export default function DataEntryPage() {
                     </div>
                     <div style={{ flex: 2 }}>
                       <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>OF Tracking Link</label>
-                      <input 
-                        list={`ofLinksList-${acc.id}`}
-                        value={currentMapping?.tracking_link_name || ''}
-                        onChange={async (e) => {
-                          const linkName = e.target.value
-                          if (!linkName) return 
-                          const linkDetails = ofLinks.find(l => l.name === linkName)
-                          if (!linkDetails) return
-                          
+                      <MappingInput 
+                        acc={acc}
+                        currentMapping={currentMapping}
+                        ofLinks={ofLinks}
+                        onSave={async (linkName, linkDetails) => {
                           const newMap = {
                             tracking_link_name: linkName,
                             tracking_link_url: linkDetails.url || '',
@@ -367,16 +363,7 @@ export default function DataEntryPage() {
                             alert("Error saving: " + err.message)
                           }
                         }}
-                        placeholder="Search & select tracking link..."
-                        style={inputStyle}
                       />
-                      <datalist id={`ofLinksList-${acc.id}`}>
-                        {ofLinks.map((l, i) => (
-                          <option key={i} value={l.name}>
-                            {l.url ? `${l.url}` : ''}
-                          </option>
-                        ))}
-                      </datalist>
                     </div>
                   </div>
                 )
@@ -804,5 +791,39 @@ function NumField({ label, value, prev, onChange }) {
         <p style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>{displayPrev}</p>
       )}
     </div>
+  )
+}
+
+function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
+  const [text, setText] = useState(currentMapping?.tracking_link_name || '')
+
+  useEffect(() => {
+    setText(currentMapping?.tracking_link_name || '')
+  }, [currentMapping?.tracking_link_name])
+
+  const handleChange = (e) => {
+    const val = e.target.value
+    setText(val)
+    const linkDetails = ofLinks.find(l => l.name === val)
+    if (linkDetails) onSave(val, linkDetails)
+  }
+
+  return (
+    <>
+      <input 
+        list={`ofLinksList-${acc.id}`}
+        value={text}
+        onChange={handleChange}
+        placeholder="Search & select tracking link..."
+        style={inputStyle}
+      />
+      <datalist id={`ofLinksList-${acc.id}`}>
+        {ofLinks.map((l, i) => (
+          <option key={i} value={l.name}>
+            {l.url ? `${l.url}` : ''}
+          </option>
+        ))}
+      </datalist>
+    </>
   )
 }
