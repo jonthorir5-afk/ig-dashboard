@@ -118,6 +118,15 @@ export default async function handler(req) {
     return json({
       ...results,
       connectedAccounts: ofAccounts.length,
+      // Debug: show all connected accounts with their username fields
+      connectedAccountsList: ofAccounts.map(a => ({
+        id: a.id,
+        display_name: a.display_name,
+        onlyfans_username: a.onlyfans_username,
+        username: a.username,
+        user_data_username: a.onlyfans_user_data?.username,
+        subscribersCount: a.onlyfans_user_data?.subscribersCount || a.subscribersCount || 0,
+      })),
       unmatchedOF,
     })
   } catch (err) {
