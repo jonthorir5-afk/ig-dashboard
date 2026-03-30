@@ -8,27 +8,41 @@ const supabase = createClient(
 const OF_API_KEY = process.env.ONLYFANS_API_KEY
 const OF_API_BASE = 'https://app.onlyfansapi.com/api'
 
-async function ofFetch(path) {
-  const res = await fetch(`${OF_API_BASE}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${OF_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`OF API ${res.status}: ${text}`)
+async function ofFetch(path, timeoutMs = 15000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${OF_API_BASE}${path}`, {
+      headers: {
+        'Authorization': `Bearer ${OF_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`OF API ${res.status}: ${text.slice(0, 300)}`)
+    }
+    return res.json()
+  } catch (err) {
+    clearTimeout(timer)
+    if (err.name === 'AbortError') throw new Error(`OF API timeout after ${timeoutMs / 1000}s on ${path}`)
+    throw err
   }
-  return res.json()
+}
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
+    return jsonResponse({ error: 'POST only' }, 405)
   }
 
   if (!OF_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ONLYFANS_API_KEY not configured' }), { status: 500 })
+    return jsonResponse({ error: 'ONLYFANS_API_KEY not configured' }, 500)
   }
 
   let body = {}
@@ -36,17 +50,30 @@ export default async function handler(req) {
   const action = body.action || 'discover'
 
   try {
-    // Step 1: Get connected OF accounts
-    const accountsRes = await ofFetch('/accounts')
-    const ofAccounts = accountsRes.data || accountsRes
-    if (!Array.isArray(ofAccounts) || ofAccounts.length === 0) {
-      return new Response(JSON.stringify({
-        error: 'No OnlyFans accounts connected in OnlyFansAPI. Connect an account at app.onlyfansapi.com first.',
+    // Test mode: just check if the API key works
+    if (action === 'test') {
+      const start = Date.now()
+      const accountsRes = await ofFetch('/accounts', 20000)
+      const elapsed = Date.now() - start
+      return jsonResponse({
+        action: 'test',
+        ok: true,
+        elapsed: `${elapsed}ms`,
         raw: accountsRes,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      })
     }
 
-    // Step 2: Collect tracking links from all connected accounts (with pagination)
+    // Step 1: Get connected OF accounts
+    const accountsRes = await ofFetch('/accounts', 20000)
+    const ofAccounts = accountsRes.data || accountsRes
+    if (!Array.isArray(ofAccounts) || ofAccounts.length === 0) {
+      return jsonResponse({
+        error: 'No OnlyFans accounts connected in OnlyFansAPI. Connect an account at app.onlyfansapi.com first.',
+        raw: accountsRes,
+      })
+    }
+
+    // Step 2: Collect tracking links from all connected accounts
     let allTrackingLinks = []
     const accountErrors = []
 
@@ -54,22 +81,15 @@ export default async function handler(req) {
       const acctId = ofAcct.id || ofAcct.account_id
       if (!acctId) continue
       try {
-        let hasMore = true
-        let offset = 0
-        while (hasMore) {
-          const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=100&offset=${offset}`)
-          let links = tlRes.data || tlRes
-          if (links && Array.isArray(links.list)) links = links.list
-          if (Array.isArray(links) && links.length > 0) {
-            allTrackingLinks.push(...links.map(l => ({
-              ...l,
-              _ofAccountId: acctId,
-              _ofAccountName: ofAcct.display_name || ofAcct.onlyfans_username || ofAcct.name || ofAcct.username || acctId,
-            })))
-            offset += links.length
-          } else {
-            hasMore = false
-          }
+        const tlRes = await ofFetch(`/${acctId}/tracking-links`, 20000)
+        let links = tlRes.data || tlRes
+        if (links && Array.isArray(links.list)) links = links.list
+        if (Array.isArray(links)) {
+          allTrackingLinks.push(...links.map(l => ({
+            ...l,
+            _ofAccountId: acctId,
+            _ofAccountName: ofAcct.display_name || ofAcct.onlyfans_username || ofAcct.name || ofAcct.username || acctId,
+          })))
         }
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
@@ -78,7 +98,7 @@ export default async function handler(req) {
 
     // Discovery mode: return raw data for inspection
     if (action === 'discover') {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         action: 'discover',
         connectedAccounts: ofAccounts.map(a => ({
           id: a.id || a.account_id,
@@ -95,7 +115,7 @@ export default async function handler(req) {
           revenue: l.revenue?.total || l.revenueTotal || 0,
         })),
         errors: accountErrors,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      })
     }
 
     // Sync mode: match tracking links to models by name
@@ -115,7 +135,6 @@ export default async function handler(req) {
       const linkName = (link.campaignName || link.name || link.label || '').toLowerCase()
       const linkUrl = (link.campaignUrl || link.url || link.link || '').toLowerCase()
 
-      // Match link to a model by name, display_name, or of_username
       const model = models?.find(m => {
         const name = (m.name || '').toLowerCase()
         const displayName = (m.display_name || '').toLowerCase()
@@ -140,7 +159,6 @@ export default async function handler(req) {
         continue
       }
 
-      // Try to match to a specific social media account
       const modelAccounts = allAccounts?.filter(a => a.model_id === model.id) || []
       let matchedAccount = null
       for (const acc of modelAccounts) {
@@ -189,15 +207,9 @@ export default async function handler(req) {
       }
     }
 
-    return new Response(JSON.stringify(results), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse(results)
 
   } catch (err) {
-    return new Response(JSON.stringify({ synced: 0, errors: [err.message] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ synced: 0, errors: [err.message] })
   }
 }
