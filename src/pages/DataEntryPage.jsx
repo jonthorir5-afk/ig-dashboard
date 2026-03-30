@@ -388,22 +388,23 @@ export default function DataEntryPage() {
                         <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
                           {syncResults.details.map((d, i) => (
                             <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
-                              {d.handle ? `@${d.handle} — ${d.action}, ` : ''}
-                              {d.followers != null ? `${d.followers.toLocaleString()} followers` : d.karma != null ? `${d.karma.toLocaleString()} karma` : ''}
-                              {d.link ? `${d.model}: ${d.link} — ${d.clicks} clicks, ${d.subscribers} subs, $${d.revenue}` : ''}
+                              {d.handle && `@${d.handle} — ${d.action}, `}
+                              {d.followers != null && `${d.followers.toLocaleString()} followers`}
+                              {d.karma != null && `${d.karma.toLocaleString()} karma`}
+                              {d.model && d.subscribers != null && `${d.model} (@${d.of_username || ''}) — ${d.subscribers.toLocaleString()} subscribers`}
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {syncResults.unmapped?.length > 0 && (
+                    {syncResults.connectedAccountsList?.length > 0 && (
                       <div style={{ marginTop: '0.75rem' }}>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Unmapped links (no model match):</p>
-                        <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.8rem' }}>
-                          {syncResults.unmapped.map((u, i) => (
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Connected OF accounts ({syncResults.connectedAccounts}):</p>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                          {syncResults.connectedAccountsList.map((a, i) => (
                             <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)', color: 'var(--text-tertiary)' }}>
-                              {u.name} — {u.clicks} clicks, {u.subscribers} subs, ${u.revenue}
+                              {a.display_name || '?'} — @{a.onlyfans_username || a.username || a.user_data_username || '?'} — {(a.subscribersCount || 0).toLocaleString()} subs
                             </div>
                           ))}
                         </div>
