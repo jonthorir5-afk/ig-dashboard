@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, ChevronRight, Check, Save, Upload, RefreshCw } from 'lucide-react'
-import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots, getLinkMappings, saveLinkMapping } from '../lib/api'
+import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGrade } from '../lib/metrics'
 import { logAudit } from '../lib/automation'
@@ -35,11 +35,6 @@ export default function DataEntryPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncResults, setSyncResults] = useState(null)
 
-  // OnlyFans Mapping state
-  const [ofLinks, setOfLinks] = useState([])
-  const [ofMappings, setOfMappings] = useState([])
-  const [loadingLinks, setLoadingLinks] = useState(false)
-
   // Per-post data (for Instagram VTFR/ER)
   const [posts, setPosts] = useState([])
 
@@ -55,31 +50,6 @@ export default function DataEntryPage() {
   }, [accounts, selectedModel])
 
   const currentAccount = useMemo(() => accounts.find(a => a.id === selectedAccount), [accounts, selectedAccount])
-
-  useEffect(() => {
-    if (entryMode === 'api-mapping') {
-      const loadOFTab = async () => {
-        setLoadingLinks(true)
-        try {
-          const maps = await getLinkMappings()
-          setOfMappings(maps || [])
-          
-          const res = await fetch('/.netlify/functions/sync-onlyfans', { 
-            method: 'POST', 
-            body: JSON.stringify({ action: 'discover' }) 
-          })
-          const data = await res.json()
-          if (data.modelUpdates) console.warn('SYNC MASTER LOG:', JSON.stringify(data.modelUpdates, null, 2))
-          if (data.trackingLinks) setOfLinks(data.trackingLinks)
-        } catch (e) {
-          console.error(e)
-        } finally {
-          setLoadingLinks(false)
-        }
-      }
-      loadOFTab()
-    }
-  }, [entryMode])
 
   // Load previous snapshot when account changes
   useEffect(() => {
@@ -301,9 +271,6 @@ export default function DataEntryPage() {
           <button className={`btn ${entryMode === 'api' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('api')}>
             <RefreshCw size={16} /> API Sync
           </button>
-          <button className={`btn ${entryMode === 'api-mapping' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEntryMode('api-mapping')}>
-            Map OF Links
-          </button>
         </div>
       </div>
 
@@ -311,66 +278,6 @@ export default function DataEntryPage() {
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <h3 style={{ marginBottom: '1rem' }}>Bulk CSV Import</h3>
           <CSVImport accounts={accounts} userId={user?.id} onComplete={() => {}} />
-        </div>
-      )}
-
-      {entryMode === 'api-mapping' && (
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Map OnlyFans Tracking Links</h3>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Assign tracking links to your social media accounts. Search by tracking name or URL. Only mapped links are synced.
-          </p>
-
-          {loadingLinks ? (
-            <div className="flex-center" style={{ padding: '3rem' }}>
-              <div className="loader" />
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              {accounts.map(acc => {
-                const currentMapping = ofMappings.find(m => m.account_id === acc.id)
-                return (
-                  <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>@{acc.handle}</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
-                        {acc.platform} • {acc.model?.name || 'Unknown Model'}
-                      </span>
-                      {acc.platform === 'twitter' && <a href={`https://twitter.com/${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'reddit' && <a href={`https://reddit.com/user/${acc.handle.replace('u/', '')}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'instagram' && <a href={`https://instagram.com/${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'tiktok' && <a href={`https://tiktok.com/@${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                    </div>
-                    <div style={{ flex: 2 }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>OF Tracking Link</label>
-                      <MappingInput 
-                        acc={acc}
-                        currentMapping={currentMapping}
-                        ofLinks={ofLinks}
-                        onSave={async (linkName, linkDetails) => {
-                          const newMap = {
-                            tracking_link_name: linkName,
-                            tracking_link_url: linkDetails.url || '',
-                            model_id: acc.model_id,
-                            account_id: acc.id
-                          }
-                          try {
-                            const saved = await saveLinkMapping(newMap)
-                            setOfMappings(prev => {
-                              const filtered = prev.filter(m => m.account_id !== acc.id && m.tracking_link_name !== linkName)
-                              return [...filtered, saved]
-                            })
-                          } catch (err) {
-                            alert("Error saving: " + err.message)
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
       )}
 
@@ -795,55 +702,3 @@ function NumField({ label, value, prev, onChange }) {
   )
 }
 
-function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
-  const [text, setText] = useState(currentMapping?.tracking_link_name || '')
-
-  useEffect(() => {
-    setText(currentMapping?.tracking_link_name || '')
-  }, [currentMapping?.tracking_link_name])
-
-  const handleChange = (e) => {
-    const val = e.target.value
-    setText(val)
-    
-    const cleanVal = val.toLowerCase().trim().replace(/\/$/, '')
-    
-    const linkDetails = ofLinks.find(l => {
-      const lName = (l.campaignName || l.name || l.label || '').toLowerCase().trim()
-      const lUrl = (l.campaignUrl || l.url || l.link || '').toLowerCase().trim().replace(/\/$/, '')
-      
-      return lName === cleanVal || lUrl === cleanVal || (cleanVal.includes('onlyfans.com') && lUrl.includes(cleanVal))
-    })
-    
-    if (linkDetails) {
-      const lName = linkDetails.campaignName || linkDetails.name || linkDetails.label
-      setText(lName)
-      onSave(lName, linkDetails)
-    } else if (val.includes('onlyfans.com') && val.length > 25) {
-      console.warn('URL pasted but NOT FOUND natively in the API downloaded tracking links: ', val)
-    }
-  }
-
-  return (
-    <>
-      <input 
-        list={`ofLinksList-${acc.id}`}
-        value={text}
-        onChange={handleChange}
-        placeholder="Search & select tracking link..."
-        style={inputStyle}
-      />
-      <datalist id={`ofLinksList-${acc.id}`}>
-        {ofLinks.map((l, i) => {
-          const lName = l.campaignName || l.name || l.label || ''
-          const lUrl = l.campaignUrl || l.url || l.link || ''
-          return (
-            <option key={i} value={lName}>
-              {lUrl}
-            </option>
-          )
-        })}
-      </datalist>
-    </>
-  )
-}

@@ -46,44 +46,45 @@ export default async function handler(req) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
-    // Collect tracking links from all connected accounts
+    // Step 2: Collect tracking links from all connected accounts (with pagination)
     let allTrackingLinks = []
     const accountErrors = []
 
-    await Promise.all(ofAccounts.map(async (ofAcct) => {
+    for (const ofAcct of ofAccounts) {
       const acctId = ofAcct.id || ofAcct.account_id
-      if (!acctId) return
+      if (!acctId) continue
       try {
         let hasMore = true
         let offset = 0
-        const limit = 100
-        
         while (hasMore) {
-          const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=${limit}&offset=${offset}`)
+          const tlRes = await ofFetch(`/${acctId}/tracking-links?limit=100&offset=${offset}`)
           let links = tlRes.data || tlRes
           if (links && Array.isArray(links.list)) links = links.list
-          
-          if (Array.isArray(links)) {
-            if (links.length === 0) {
-              hasMore = false
-            } else {
-              allTrackingLinks.push(...links.map(l => ({ ...l, _ofAccountId: acctId, _ofAccountName: ofAcct.name || ofAcct.username || acctId })))
-              offset += links.length
-            }
+          if (Array.isArray(links) && links.length > 0) {
+            allTrackingLinks.push(...links.map(l => ({
+              ...l,
+              _ofAccountId: acctId,
+              _ofAccountName: ofAcct.display_name || ofAcct.onlyfans_username || ofAcct.name || ofAcct.username || acctId,
+            })))
+            offset += links.length
           } else {
-            if (offset === 0) accountErrors.push(`${acctId}: Unexpected response format (no tracking links array found)`)
             hasMore = false
           }
         }
       } catch (err) {
         accountErrors.push(`${acctId}: ${err.message}`)
       }
-    }))
+    }
 
+    // Discovery mode: return raw data for inspection
     if (action === 'discover') {
       return new Response(JSON.stringify({
         action: 'discover',
-        connectedAccounts: ofAccounts.map(a => ({ id: a.id || a.account_id, name: a.display_name || a.onlyfans_username || a.name || a.username, rawAccount: a })),
+        connectedAccounts: ofAccounts.map(a => ({
+          id: a.id || a.account_id,
+          name: a.display_name || a.onlyfans_username || a.name || a.username,
+          subscribersCount: a.onlyfans_user_data?.subscribersCount || a.subscribersCount || 0,
+        })),
         trackingLinks: allTrackingLinks.map(l => ({
           ofAccount: l._ofAccountName,
           name: l.campaignName || l.name || l.label,
@@ -97,49 +98,40 @@ export default async function handler(req) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
 
-    // Sync mode: match tracking links to models
-    const { data: mappings } = await supabase
-      .from('of_link_mappings')
-      .select('tracking_link_name, model_id, account_id')
+    // Sync mode: match tracking links to models by name
+    const { data: models } = await supabase
+      .from('models')
+      .select('id, name, display_name, of_username')
+      .eq('status', 'Active')
 
-    const { data: models } = await supabase.from('models').select('id, name, of_username')
-    const modelUpdates = []
-    
-    // Sync master OF Account subscribers
-    for (const model of models || []) {
-      if (!model.of_username) { modelUpdates.push(`Skipped ${model.name}: no of_username`); continue; }
-      const dbName = model.of_username.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const matchedOfAcct = ofAccounts.find(a => {
-        const apiUser = (a.onlyfans_username || a.onlyfans_user_data?.username || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-        const apiName = (a.display_name || a.onlyfans_user_data?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-        return (apiUser && apiUser.includes(dbName)) || (apiName && apiName.includes(dbName)) || (dbName && dbName.includes(apiUser))
-      })
-      if (matchedOfAcct) {
-        const userData = matchedOfAcct.onlyfans_user_data || matchedOfAcct
-        const totalSubs = userData.subscribersCount || userData.activeSubscribersCount || userData.subscribers || userData.subscriberCount || 0
-        const { error } = await supabase.from('models').update({ of_subs: totalSubs }).eq('id', model.id)
-        if (error) modelUpdates.push(`DB ERROR ${model.name}: ${error.message}`)
-        else modelUpdates.push(`Matched ${model.name} to ${matchedOfAcct.display_name}. Updated to ${totalSubs} subs.`)
-      } else {
-        modelUpdates.push(`No match found for ${model.name} using of_username ${model.of_username}`)
-      }
-    }
-
-    const { data: accounts } = await supabase.from('accounts').select('id, handle')
+    const { data: allAccounts } = await supabase
+      .from('accounts')
+      .select('id, handle, platform, model_id')
 
     const today = new Date().toISOString().split('T')[0]
     const results = { synced: 0, skipped: 0, errors: [...accountErrors], details: [], unmapped: [] }
 
     for (const link of allTrackingLinks) {
-      const linkName = link.campaignName || link.name || link.label || ''
-      const linkUrl = link.campaignUrl || link.url || link.link || ''
+      const linkName = (link.campaignName || link.name || link.label || '').toLowerCase()
+      const linkUrl = (link.campaignUrl || link.url || link.link || '').toLowerCase()
 
-      const mapping = mappings?.find(m => m.tracking_link_name === linkName)
+      // Match link to a model by name, display_name, or of_username
+      const model = models?.find(m => {
+        const name = (m.name || '').toLowerCase()
+        const displayName = (m.display_name || '').toLowerCase()
+        const ofUser = (m.of_username || '').toLowerCase()
+        return (
+          (name && linkName.includes(name)) ||
+          (displayName && linkName.includes(displayName)) ||
+          (ofUser && linkName.includes(ofUser)) ||
+          (ofUser && linkUrl.includes(ofUser))
+        )
+      })
 
-      if (!mapping) {
+      if (!model) {
         results.unmapped.push({
-          name: linkName,
-          url: linkUrl,
+          name: link.campaignName || link.name || link.label,
+          url: link.campaignUrl || link.url || link.link,
           clicks: link.clicksCount || link.clicks || 0,
           subscribers: link.subscribersCount || link.subscribers || 0,
           revenue: link.revenue?.total || link.revenueTotal || 0,
@@ -148,8 +140,17 @@ export default async function handler(req) {
         continue
       }
 
-      const model = models?.find(m => m.id === mapping.model_id) || { name: 'Unknown' }
-      const matchedAccount = accounts?.find(a => a.id === mapping.account_id)
+      // Try to match to a specific social media account
+      const modelAccounts = allAccounts?.filter(a => a.model_id === model.id) || []
+      let matchedAccount = null
+      for (const acc of modelAccounts) {
+        const handle = acc.handle.toLowerCase()
+        const platform = acc.platform.toLowerCase()
+        if (linkName.includes(handle) || linkName.includes(platform)) {
+          matchedAccount = acc
+          break
+        }
+      }
 
       const clicks = link.clicksCount || link.clicks || 0
       const subscribers = link.subscribersCount || link.subscribers || 0
@@ -157,10 +158,10 @@ export default async function handler(req) {
       const totalRevenue = revenueData.total || link.revenueTotal || 0
 
       const trackingRecord = {
-        model_id: mapping.model_id,
-        account_id: mapping.account_id || null,
-        tracking_link_name: linkName,
-        tracking_link_url: linkUrl,
+        model_id: model.id,
+        account_id: matchedAccount?.id || null,
+        tracking_link_name: link.campaignName || link.name || link.label,
+        tracking_link_url: link.campaignUrl || link.url || link.link,
         snapshot_date: today,
         clicks,
         subscribers,
@@ -188,11 +189,7 @@ export default async function handler(req) {
       }
     }
 
-    return new Response(JSON.stringify({
-      ...results,
-      details: [...modelUpdates, ...(results.errors.length ? results.errors : [`Synced ${results.synced} links successfully.`])],
-      modelUpdates
-    }), {
+    return new Response(JSON.stringify(results), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })

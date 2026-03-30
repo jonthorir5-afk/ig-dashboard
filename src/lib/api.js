@@ -325,26 +325,4 @@ export async function getExecOverview() {
   }
 }
 
-// ============================================================
-// ONLYFANS MAPPINGS
-// ============================================================
-export async function getLinkMappings() {
-  if (isDemoMode()) return []
-  const { data, error } = await supabase
-    .from('of_link_mappings')
-    .select('*')
-  if (error) throw error
-  return data
-}
-
-export async function saveLinkMapping(mapping) {
-  if (isDemoMode()) return mapping
-  const { data, error } = await supabase
-    .from('of_link_mappings')
-    .upsert(mapping, { onConflict: 'tracking_link_name' })
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
 
