@@ -308,8 +308,7 @@ export async function getExecOverview() {
       .gte('snapshot_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0])
       .order('snapshot_date', { ascending: false }),
     supabase.from('of_tracking')
-      .select('*')
-      .gte('snapshot_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0])
+      .select('model_id, subscribers, clicks, revenue_total, tracking_link_name, snapshot_date')
       .order('snapshot_date', { ascending: false })
   ])
 
@@ -322,7 +321,7 @@ export async function getExecOverview() {
     models: modelsRes.data,
     accounts: accountsRes.data,
     snapshots: snapshotsRes.data,
-    ofTracking: ofTrackingRes.data
+    ofTracking: ofTrackingRes.data || [],
   }
 }
 
