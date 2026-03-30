@@ -10,6 +10,10 @@
   external_node_modules = ["@supabase/supabase-js"]
   timeout = 120
 
+[functions."sync-onlyfans"]
+  external_node_modules = ["@supabase/supabase-js"]
+  timeout = 120
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
