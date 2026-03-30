@@ -63,7 +63,16 @@ export default function ExecOverview() {
           }
           row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
         }
-        row.of = ofSubsByModel[model.id] || null
+        // OF subs: prefer of_tracking aggregation, fall back to model.of_subs
+        const trackingData = ofSubsByModel[model.id] || null
+        const modelSubs = typeof model.of_subs === 'number' ? model.of_subs : null
+        if (trackingData) {
+          row.of = trackingData
+        } else if (modelSubs != null) {
+          row.of = { subscribers: modelSubs, clicks: 0, revenue: 0, links: 0 }
+        } else {
+          row.of = null
+        }
         return row
       })
   }, [data])

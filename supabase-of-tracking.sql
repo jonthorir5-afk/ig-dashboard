@@ -1,26 +1,22 @@
--- OnlyFans tracking link data
--- Stores daily snapshots of clicks, subscribers, and revenue per tracking link
-CREATE TABLE IF NOT EXISTS of_tracking (
-  id uuid primary key default gen_random_uuid(),
-  model_id uuid not null,
-  account_id uuid,
-  tracking_link_name text not null,
-  tracking_link_url text,
-  snapshot_date date not null default current_date,
-  clicks integer default 0,
-  subscribers integer default 0,
-  revenue_total numeric(10,2) default 0,
-  revenue_per_subscriber numeric(10,2) default 0,
-  revenue_per_click numeric(10,2) default 0,
-  created_at timestamptz default now(),
-
-  -- One record per model + link + date
-  unique(model_id, tracking_link_name, snapshot_date)
+CREATE TABLE IF NOT EXISTS public.of_tracking (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    model_id uuid REFERENCES public.models(id) ON DELETE CASCADE,
+    account_id uuid REFERENCES public.accounts(id) ON DELETE CASCADE,
+    tracking_link_name text NOT NULL,
+    tracking_link_url text,
+    snapshot_date date NOT NULL,
+    clicks integer DEFAULT 0,
+    subscribers integer DEFAULT 0,
+    revenue_total numeric DEFAULT 0,
+    revenue_per_subscriber numeric DEFAULT 0,
+    revenue_per_click numeric DEFAULT 0,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(model_id, tracking_link_name, snapshot_date)
 );
 
-CREATE INDEX idx_of_tracking_model_date ON of_tracking(model_id, snapshot_date DESC);
-CREATE INDEX idx_of_tracking_account ON of_tracking(account_id);
+-- Enable RLS
+ALTER TABLE public.of_tracking ENABLE ROW LEVEL SECURITY;
 
--- Allow service role to manage this table
-ALTER TABLE of_tracking ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access" ON of_tracking FOR ALL USING (true) WITH CHECK (true);
+-- Allow authenticated users unrestricted access to tracking stats
+CREATE POLICY "Allow all actions for authenticated users" 
+ON public.of_tracking FOR ALL USING (auth.role() = 'authenticated');
