@@ -65,10 +65,10 @@ export default function ExecOverview() {
         }
         // OF subs: prefer of_tracking aggregation, fall back to model.of_subs
         const trackingData = ofSubsByModel[model.id] || null
-        const modelSubs = typeof model.of_subs === 'number' ? model.of_subs : null
-        if (trackingData) {
+        const modelSubs = typeof model.of_subs === 'number' && model.of_subs > 0 ? model.of_subs : null
+        if (trackingData && trackingData.subscribers > 0) {
           row.of = trackingData
-        } else if (modelSubs != null) {
+        } else if (modelSubs) {
           row.of = { subscribers: modelSubs, clicks: 0, revenue: 0, links: 0 }
         } else {
           row.of = null
