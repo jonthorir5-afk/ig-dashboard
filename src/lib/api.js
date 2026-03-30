@@ -300,12 +300,15 @@ export async function getExecOverview() {
         .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date)),
     }
   }
-  const [modelsRes, accountsRes, snapshotsRes] = await Promise.all([
+  const [modelsRes, accountsRes, snapshotsRes, ofTrackingRes] = await Promise.all([
     supabase.from('models').select('*').eq('status', 'Active'),
     supabase.from('accounts').select('*, model:models(id, name)'),
     supabase.from('snapshots')
       .select('*, account:accounts(id, platform, handle, health, model_id, model:models(id, name))')
       .gte('snapshot_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0])
+      .order('snapshot_date', { ascending: false }),
+    supabase.from('of_tracking')
+      .select('model_id, subscribers, clicks, revenue_total, tracking_link_name, snapshot_date')
       .order('snapshot_date', { ascending: false })
   ])
 
@@ -316,6 +319,7 @@ export async function getExecOverview() {
   return {
     models: modelsRes.data,
     accounts: accountsRes.data,
-    snapshots: snapshotsRes.data
+    snapshots: snapshotsRes.data,
+    ofTracking: ofTrackingRes.data || [],
   }
 }
