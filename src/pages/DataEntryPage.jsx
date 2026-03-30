@@ -232,7 +232,12 @@ export default function DataEntryPage() {
     setSyncing(true)
     setSyncResults(null)
     try {
-      const res = await fetch(`/.netlify/functions/sync-${platform}`, { method: 'POST' })
+      const fetchOpts = { method: 'POST' }
+      if (platform === 'onlyfans') {
+        fetchOpts.headers = { 'Content-Type': 'application/json' }
+        fetchOpts.body = JSON.stringify({ action: 'sync' })
+      }
+      const res = await fetch(`/.netlify/functions/sync-${platform}`, fetchOpts)
       const text = await res.text()
       let data
       try { data = JSON.parse(text) } catch { throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 500)}`) }

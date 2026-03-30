@@ -22,29 +22,13 @@ export default function ExecOverview() {
   // Per-model, per-platform follower totals for the summary table
   const modelPlatformTable = useMemo(() => {
     if (!data) return []
-    const { models, accounts, snapshots: snaps, ofTracking = [] } = data
+    const { models, accounts, snapshots: snaps } = data
     // Build latest snapshot per account
     const latestSnap = {}
     for (const s of snaps) {
       if (!latestSnap[s.account_id] || s.snapshot_date > latestSnap[s.account_id].snapshot_date) {
         latestSnap[s.account_id] = s
       }
-    }
-    // Build OF subs per model (sum latest subscribers across all tracking links)
-    const ofSubsByModel = {}
-    const ofLatestByLink = {}
-    for (const t of ofTracking) {
-      const key = `${t.model_id}::${t.tracking_link_name}`
-      if (!ofLatestByLink[key] || t.snapshot_date > ofLatestByLink[key].snapshot_date) {
-        ofLatestByLink[key] = t
-      }
-    }
-    for (const t of Object.values(ofLatestByLink)) {
-      if (!ofSubsByModel[t.model_id]) ofSubsByModel[t.model_id] = { subscribers: 0, clicks: 0, revenue: 0, links: 0 }
-      ofSubsByModel[t.model_id].subscribers += t.subscribers || 0
-      ofSubsByModel[t.model_id].clicks += t.clicks || 0
-      ofSubsByModel[t.model_id].revenue += parseFloat(t.revenue_total) || 0
-      ofSubsByModel[t.model_id].links++
     }
 
     return models
@@ -63,7 +47,7 @@ export default function ExecOverview() {
           }
           row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
         }
-        row.of = ofSubsByModel[model.id] || null
+        row.of_subs = model.of_subs > 0 ? model.of_subs : null
         return row
       })
   }, [data])
@@ -371,17 +355,10 @@ export default function ExecOverview() {
                       </td>
                     ))}
                     <td style={{ textAlign: 'center' }}>
-                      {row.of ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                            {formatNumber(row.of.subscribers)}
-                          </span>
-                          {row.of.links > 0 && (
-                            <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>
-                              {row.of.links} link{row.of.links !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
+                      {row.of_subs != null ? (
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          {formatNumber(row.of_subs)}
+                        </span>
                       ) : (
                         <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>—</span>
                       )}
