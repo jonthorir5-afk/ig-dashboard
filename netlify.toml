@@ -14,6 +14,10 @@
   external_node_modules = ["@supabase/supabase-js"]
   timeout = 120
 
+[functions."scheduled-sync"]
+  external_node_modules = ["@supabase/supabase-js", "@netlify/functions"]
+  timeout = 120
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
