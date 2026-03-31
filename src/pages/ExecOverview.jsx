@@ -89,25 +89,25 @@ export default function ExecOverview() {
     const latestArr = Object.values(latestByAccount)
     const prevArr = Object.values(previousByAccount)
 
-    const totalReach = latestArr.reduce((sum, s) => sum + getSnapshotViews(s), 0)
+    const totalFollowers = latestArr.reduce((sum, s) => sum + (s.followers || 0), 0)
+    const prevTotalFollowers = prevArr.reduce((sum, s) => sum + (s.followers || 0), 0)
     const totalClicks = latestArr.reduce((sum, s) => sum + getSnapshotClicks(s), 0)
-    const prevReach = prevArr.reduce((sum, s) => sum + getSnapshotViews(s), 0)
     const prevClicks = prevArr.reduce((sum, s) => sum + getSnapshotClicks(s), 0)
 
-    const reachTrend = prevReach ? ((totalReach - prevReach) / prevReach * 100).toFixed(1) : null
+    const followersTrend = prevTotalFollowers ? ((totalFollowers - prevTotalFollowers) / prevTotalFollowers * 100).toFixed(1) : null
     const clicksTrend = prevClicks ? ((totalClicks - prevClicks) / prevClicks * 100).toFixed(1) : null
 
-    // Per-platform reach
-    const platformReach = {}
+    // Per-platform followers (total from latest snapshots)
+    const platformFollowers = {}
     for (const p of ['twitter', 'reddit', 'instagram', 'tiktok']) {
       const platAccountIds = new Set(accounts.filter(a => a.platform === p).map(a => a.id))
       const platLatest = latestArr.filter(s => platAccountIds.has(s.account_id))
       const platPrev = prevArr.filter(s => platAccountIds.has(s.account_id))
-      const reach = platLatest.reduce((sum, s) => sum + getSnapshotViews(s), 0)
-      const prevR = platPrev.reduce((sum, s) => sum + getSnapshotViews(s), 0)
-      platformReach[p] = {
-        reach,
-        trend: prevR ? ((reach - prevR) / prevR * 100).toFixed(1) : null,
+      const followers = platLatest.reduce((sum, s) => sum + (s.followers || 0), 0)
+      const prevFollowers = platPrev.reduce((sum, s) => sum + (s.followers || 0), 0)
+      platformFollowers[p] = {
+        followers,
+        trend: prevFollowers ? ((followers - prevFollowers) / prevFollowers * 100).toFixed(1) : null,
       }
     }
 
@@ -135,9 +135,9 @@ export default function ExecOverview() {
       totalAccounts: accounts.length,
       activeAccounts: activeAccounts.length,
       platformCounts,
-      totalReach,
+      totalFollowers,
       totalClicks,
-      reachTrend,
+      followersTrend,
       clicksTrend,
       topModels: modelRanking.slice(0, 3),
       bottomModels: modelRanking.slice(-3).reverse(),
@@ -145,7 +145,7 @@ export default function ExecOverview() {
       missingData,
       latestSnapshots: latestArr,
       modelRanking,
-      platformReach,
+      platformFollowers,
     }
   }, [data])
 
@@ -241,10 +241,10 @@ export default function ExecOverview() {
       <div className="metrics-grid">
         <MetricCard icon={Users} iconClass="followers" label="Active Models" value={stats.activeModels} />
         <MetricCard
-          icon={Eye} iconClass="views"
-          label="Total Reach (7d)"
-          value={formatNumber(stats.totalReach)}
-          trend={stats.reachTrend}
+          icon={Users} iconClass="views"
+          label="Total Followers"
+          value={formatNumber(stats.totalFollowers)}
+          trend={stats.followersTrend}
         />
         <MetricCard
           icon={MousePointerClick} iconClass="engagement"
@@ -259,24 +259,24 @@ export default function ExecOverview() {
         />
       </div>
 
-      {/* Per-platform reach */}
+      {/* Per-platform followers */}
       <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {[
-          { key: 'twitter', label: 'Twitter / X', icon: '𝕏' },
-          { key: 'reddit', label: 'Reddit', icon: 'R' },
-          { key: 'instagram', label: 'Instagram', icon: 'IG' },
-          { key: 'tiktok', label: 'TikTok', icon: 'TT' },
+          { key: 'twitter', label: 'Twitter / X' },
+          { key: 'reddit', label: 'Reddit' },
+          { key: 'instagram', label: 'Instagram' },
+          { key: 'tiktok', label: 'TikTok' },
         ].map(p => {
-          const pr = stats.platformReach[p.key] || {}
+          const pf = stats.platformFollowers[p.key] || {}
           return (
             <Link to={`/platforms/${p.key}`} key={p.key} className="metric-card glass-panel" style={{ textDecoration: 'none', cursor: 'pointer' }}>
               <div className="metric-data">
                 <p className="metric-label">{p.label}</p>
-                <h3 className="metric-value">{formatNumber(pr.reach || 0)}</h3>
+                <h3 className="metric-value">{formatNumber(pf.followers || 0)}</h3>
                 <span className="metric-text">{stats.platformCounts[p.key] || 0} accounts</span>
-                {pr.trend != null && (
-                  <span className={`metric-trend ${Number(pr.trend) >= 0 ? 'positive' : 'negative'}`}>
-                    {Number(pr.trend) >= 0 ? '+' : ''}{pr.trend}% vs last week
+                {pf.trend != null && (
+                  <span className={`metric-trend ${Number(pf.trend) >= 0 ? 'positive' : 'negative'}`}>
+                    {Number(pf.trend) >= 0 ? '+' : ''}{pf.trend}% vs last week
                   </span>
                 )}
               </div>
