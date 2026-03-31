@@ -43,9 +43,14 @@ export default function ExecOverview() {
           let hasData = false
           for (const acc of platAccts) {
             const snap = latestSnap[acc.id]
-            if (snap) { totalFollowers += snap.followers || 0; hasData = true }
+            if (snap) { 
+              const val = p === 'reddit' ? (snap.rd_karma_total || 0) : (snap.followers || 0)
+              totalFollowers += val
+              hasData = true 
+            }
           }
-          row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
+          // For display purposes, we pass the aggregated value under 'mainMetric'
+          row[p] = { accounts: platAccts.length, mainMetric: hasData ? totalFollowers : null }
         }
         row.of_subs = model.of_subs > 0 ? model.of_subs : null
         return row
@@ -342,8 +347,8 @@ export default function ExecOverview() {
                       <td key={p} style={{ textAlign: 'center' }}>
                         {row[p] ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                              {row[p].followers != null ? formatNumber(row[p].followers) : '—'}
+                            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }} title={p === 'reddit' ? 'Total Karma' : 'Total Followers'}>
+                              {row[p].mainMetric != null ? formatNumber(row[p].mainMetric) : '—'}
                             </span>
                             <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>
                               {row[p].accounts} acct{row[p].accounts !== 1 ? 's' : ''}
