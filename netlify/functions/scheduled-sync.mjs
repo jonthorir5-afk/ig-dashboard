@@ -22,6 +22,7 @@ async function syncTwitterViews() {
 
   const today = new Date().toISOString().split('T')[0]
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   const results = { synced: 0, errors: [] }
 
   const searchTerms = accounts.map(a => `from:${a.handle.replace('@', '')}`)
@@ -41,7 +42,7 @@ async function syncTwitterViews() {
           signal: controller.signal,
           body: JSON.stringify({
             searchTerms: batchTerms,
-            maxItems: batchTerms.length * 50,
+            maxItems: batchTerms.length * 150,
             sort: 'Latest',
           }),
         }
@@ -55,21 +56,24 @@ async function syncTwitterViews() {
         const author = (tweet.author?.userName || '').toLowerCase()
         if (!author) continue
         const tweetDate = tweet.createdAt || tweet.created_at
-        if (tweetDate) {
-          const dateStr = new Date(tweetDate).toISOString().split('T')[0]
-          if (dateStr < sevenDaysAgo) continue
-        }
+        if (!tweetDate) continue
+        const dateStr = new Date(tweetDate).toISOString().split('T')[0]
+        if (dateStr < thirtyDaysAgo) continue
         const views = parseInt(tweet.viewCount || 0, 10) || 0
-        if (!viewsByUser[author]) viewsByUser[author] = { views: 0, tweetCount: 0 }
-        viewsByUser[author].views += views
-        viewsByUser[author].tweetCount++
+        if (!viewsByUser[author]) viewsByUser[author] = { views7d: 0, views30d: 0, tweets7d: 0, tweets30d: 0 }
+        viewsByUser[author].views30d += views
+        viewsByUser[author].tweets30d++
+        if (dateStr >= sevenDaysAgo) {
+          viewsByUser[author].views7d += views
+          viewsByUser[author].tweets7d++
+        }
       }
 
       for (const account of batchAccounts) {
         const handle = account.handle.replace('@', '').toLowerCase()
         const userData = viewsByUser[handle]
         if (!userData) continue
-        const viewData = { tw_views_7d: userData.views, tw_tweets_posted_7d: userData.tweetCount }
+        const viewData = { tw_views_7d: userData.views7d, tw_impressions_7d: userData.views30d, tw_tweets_posted_7d: userData.tweets7d }
         const { data: existing } = await supabase.from('snapshots').select('id').eq('account_id', account.id).eq('snapshot_date', today).limit(1)
         if (existing?.length) {
           await supabase.from('snapshots').update(viewData).eq('id', existing[0].id)

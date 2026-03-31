@@ -33,6 +33,7 @@ export default async function handler(req) {
 
   const today = new Date().toISOString().split('T')[0]
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   const results = { synced: 0, skipped: 0, errors: [], details: [] }
 
   // Build search terms: "from:username" for each account
@@ -40,6 +41,7 @@ export default async function handler(req) {
 
   try {
     // Use apidojo/tweet-scraper to get recent tweets with view counts
+    // Scrape 30 days of tweets so we can compute both 7d and 30d views
     // Process in batches of 5 handles to stay within actor limits
     const batchSize = 5
     for (let i = 0; i < searchTerms.length; i += batchSize) {
@@ -58,7 +60,7 @@ export default async function handler(req) {
             signal: controller.signal,
             body: JSON.stringify({
               searchTerms: batchTerms,
-              maxItems: batchTerms.length * 50, // ~50 tweets per handle
+              maxItems: batchTerms.length * 150, // ~150 tweets per handle (covers 30 days)
               sort: 'Latest',
               includeSearchTerms: false,
             }),
@@ -74,23 +76,33 @@ export default async function handler(req) {
 
         const tweets = await runRes.json()
 
-        // Group tweets by author username and sum views for last 7 days
+        // Group tweets by author username, bucket into 7d and 30d windows
         const viewsByUser = {}
         for (const tweet of tweets) {
           const author = (tweet.author?.userName || tweet.user?.screen_name || '').toLowerCase()
           if (!author) continue
 
-          // Check if tweet is within last 7 days
           const tweetDate = tweet.createdAt || tweet.created_at
-          if (tweetDate) {
-            const dateStr = new Date(tweetDate).toISOString().split('T')[0]
-            if (dateStr < sevenDaysAgo) continue
-          }
+          if (!tweetDate) continue
+          const dateStr = new Date(tweetDate).toISOString().split('T')[0]
+
+          // Skip tweets older than 30 days
+          if (dateStr < thirtyDaysAgo) continue
 
           const views = parseInt(tweet.viewCount || tweet.views || 0, 10) || 0
-          if (!viewsByUser[author]) viewsByUser[author] = { views: 0, tweetCount: 0 }
-          viewsByUser[author].views += views
-          viewsByUser[author].tweetCount++
+          if (!viewsByUser[author]) {
+            viewsByUser[author] = { views7d: 0, views30d: 0, tweets7d: 0, tweets30d: 0 }
+          }
+
+          // All tweets within 30 days count toward 30d totals
+          viewsByUser[author].views30d += views
+          viewsByUser[author].tweets30d++
+
+          // Tweets within 7 days also count toward 7d totals
+          if (dateStr >= sevenDaysAgo) {
+            viewsByUser[author].views7d += views
+            viewsByUser[author].tweets7d++
+          }
         }
 
         // Update snapshots for each account in this batch
@@ -113,8 +125,9 @@ export default async function handler(req) {
             .limit(1)
 
           const viewData = {
-            tw_views_7d: userData.views,
-            tw_tweets_posted_7d: userData.tweetCount,
+            tw_views_7d: userData.views7d,
+            tw_impressions_7d: userData.views30d, // repurpose impressions field for 30d views
+            tw_tweets_posted_7d: userData.tweets7d,
           }
 
           if (existing && existing.length > 0) {
@@ -125,7 +138,11 @@ export default async function handler(req) {
             if (upErr) {
               results.errors.push(`@${handle}: update failed — ${upErr.message}`)
             } else {
-              results.details.push({ handle, action: 'updated', views: userData.views, tweets: userData.tweetCount })
+              results.details.push({
+                handle, action: 'updated',
+                views_7d: userData.views7d, views_30d: userData.views30d,
+                tweets_7d: userData.tweets7d, tweets_30d: userData.tweets30d,
+              })
               results.synced++
             }
           } else {
@@ -141,7 +158,11 @@ export default async function handler(req) {
             if (insErr) {
               results.errors.push(`@${handle}: insert failed — ${insErr.message}`)
             } else {
-              results.details.push({ handle, action: 'created', views: userData.views, tweets: userData.tweetCount })
+              results.details.push({
+                handle, action: 'created',
+                views_7d: userData.views7d, views_30d: userData.views30d,
+                tweets_7d: userData.tweets7d, tweets_30d: userData.tweets30d,
+              })
               results.synced++
             }
           }
