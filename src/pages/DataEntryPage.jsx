@@ -261,7 +261,7 @@ export default function DataEntryPage() {
     setSyncing(true)
     setSyncResults(null)
     const allResults = { synced: 0, errors: [], details: [] }
-    for (const platform of ['twitter', 'twitter-views', 'reddit', 'onlyfans']) {
+    for (const platform of ['twitter', 'twitter-views', 'reddit', 'tiktok-views', 'onlyfans']) {
       try {
         const fetchOpts = { method: 'POST' }
         if (platform === 'onlyfans') {
@@ -341,6 +341,7 @@ export default function DataEntryPage() {
             <button className="btn btn-secondary" onClick={() => handleApiSync('twitter')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Twitter/X</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('twitter-views')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Twitter Views</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('reddit')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Reddit</button>
+            <button className="btn btn-secondary" onClick={() => handleApiSync('tiktok-views')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>TikTok Views</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('onlyfans')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>OnlyFans</button>
           </div>
           <p style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginTop: '0.75rem' }}>
