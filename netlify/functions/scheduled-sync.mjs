@@ -11,6 +11,78 @@ const APIFY_TOKEN = process.env.APIFY_TOKEN
 const OF_API_KEY = process.env.ONLYFANS_API_KEY
 const OF_API_BASE = 'https://app.onlyfansapi.com/api'
 
+// ── Twitter Views Sync (via Apify) ──
+async function syncTwitterViews() {
+  if (!APIFY_TOKEN) return { synced: 0, errors: ['APIFY_TOKEN not configured'] }
+
+  const { data: accounts, error: accErr } = await supabase
+    .from('accounts').select('id, handle, model_id').eq('platform', 'twitter').eq('status', 'Active')
+  if (accErr) return { synced: 0, errors: [accErr.message] }
+  if (!accounts.length) return { synced: 0, errors: [] }
+
+  const today = new Date().toISOString().split('T')[0]
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const results = { synced: 0, errors: [] }
+
+  const searchTerms = accounts.map(a => `from:${a.handle.replace('@', '')}`)
+  const batchSize = 5
+
+  for (let i = 0; i < searchTerms.length; i += batchSize) {
+    const batchTerms = searchTerms.slice(i, i + batchSize)
+    const batchAccounts = accounts.slice(i, i + batchSize)
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 90000)
+      const runRes = await fetch(
+        `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            searchTerms: batchTerms,
+            maxItems: batchTerms.length * 50,
+            sort: 'Latest',
+          }),
+        }
+      )
+      clearTimeout(timer)
+      if (!runRes.ok) { results.errors.push(`Apify ${runRes.status}`); continue }
+      const tweets = await runRes.json()
+
+      const viewsByUser = {}
+      for (const tweet of tweets) {
+        const author = (tweet.author?.userName || '').toLowerCase()
+        if (!author) continue
+        const tweetDate = tweet.createdAt || tweet.created_at
+        if (tweetDate) {
+          const dateStr = new Date(tweetDate).toISOString().split('T')[0]
+          if (dateStr < sevenDaysAgo) continue
+        }
+        const views = parseInt(tweet.viewCount || 0, 10) || 0
+        if (!viewsByUser[author]) viewsByUser[author] = { views: 0, tweetCount: 0 }
+        viewsByUser[author].views += views
+        viewsByUser[author].tweetCount++
+      }
+
+      for (const account of batchAccounts) {
+        const handle = account.handle.replace('@', '').toLowerCase()
+        const userData = viewsByUser[handle]
+        if (!userData) continue
+        const viewData = { tw_views_7d: userData.views, tw_tweets_posted_7d: userData.tweetCount }
+        const { data: existing } = await supabase.from('snapshots').select('id').eq('account_id', account.id).eq('snapshot_date', today).limit(1)
+        if (existing?.length) {
+          await supabase.from('snapshots').update(viewData).eq('id', existing[0].id)
+        } else {
+          await supabase.from('snapshots').insert({ account_id: account.id, snapshot_date: today, captured_by: 'API-Twitter-Views', ...viewData })
+        }
+        results.synced++
+      }
+    } catch (err) { results.errors.push(err.message) }
+  }
+  return results
+}
+
 // ── Twitter Sync ──
 async function syncTwitter() {
   if (!TWITTER_BEARER) return { synced: 0, errors: ['TWITTER_BEARER_TOKEN not configured'] }
@@ -154,9 +226,13 @@ export const handler = schedule('0 6 * * *', async () => {
     syncOnlyFans(),
   ])
 
+  // Run Twitter views sync after follower sync (needs snapshots to exist)
+  const twitterViews = await syncTwitterViews()
+
   const summary = {
     timestamp: new Date().toISOString(),
     twitter,
+    twitterViews,
     reddit,
     onlyfans,
   }

@@ -97,7 +97,7 @@ export default function ExecOverview() {
     const followersTrend = prevTotalFollowers ? ((totalFollowers - prevTotalFollowers) / prevTotalFollowers * 100).toFixed(1) : null
     const clicksTrend = prevClicks ? ((totalClicks - prevClicks) / prevClicks * 100).toFixed(1) : null
 
-    // Per-platform followers (total from latest snapshots)
+    // Per-platform followers and views (total from latest snapshots)
     const platformFollowers = {}
     for (const p of ['twitter', 'reddit', 'instagram', 'tiktok']) {
       const platAccountIds = new Set(accounts.filter(a => a.platform === p).map(a => a.id))
@@ -105,8 +105,10 @@ export default function ExecOverview() {
       const platPrev = prevArr.filter(s => platAccountIds.has(s.account_id))
       const followers = platLatest.reduce((sum, s) => sum + (s.followers || 0), 0)
       const prevFollowers = platPrev.reduce((sum, s) => sum + (s.followers || 0), 0)
+      const views = platLatest.reduce((sum, s) => sum + (getSnapshotViews(s) || 0), 0)
       platformFollowers[p] = {
         followers,
+        views: views || null,
         trend: prevFollowers ? ((followers - prevFollowers) / prevFollowers * 100).toFixed(1) : null,
       }
     }
@@ -273,6 +275,11 @@ export default function ExecOverview() {
               <div className="metric-data">
                 <p className="metric-label">{p.label}</p>
                 <h3 className="metric-value">{formatNumber(pf.followers || 0)}</h3>
+                {pf.views && (
+                  <span className="metric-text" style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    {formatNumber(pf.views)} views (7d)
+                  </span>
+                )}
                 <span className="metric-text">{stats.platformCounts[p.key] || 0} accounts</span>
                 {pf.trend != null && (
                   <span className={`metric-trend ${Number(pf.trend) >= 0 ? 'positive' : 'negative'}`}>
