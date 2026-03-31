@@ -190,6 +190,32 @@ create policy "Snapshots are updatable by authenticated users"
 create index idx_snapshots_account_date on public.snapshots(account_id, snapshot_date desc);
 
 -- ============================================================
+-- MODEL SNAPSHOTS (tracking OF subs & model-level metrics)
+-- ============================================================
+create table public.model_snapshots (
+  id uuid primary key default uuid_generate_v4(),
+  model_id uuid not null references public.models(id) on delete cascade,
+  snapshot_date date not null,
+  of_subs integer default 0,
+  captured_by text default 'API-OnlyFans',
+  notes text,
+  created_at timestamptz default now()
+);
+
+alter table public.model_snapshots enable row level security;
+
+create policy "Model snapshots are viewable by authenticated users"
+  on public.model_snapshots for select to authenticated using (true);
+
+create policy "Model snapshots are insertable by authenticated users"
+  on public.model_snapshots for insert to authenticated with check (true);
+
+create policy "Model snapshots are updatable by authenticated users"
+  on public.model_snapshots for update to authenticated using (true);
+
+create index idx_model_snapshots_model_date on public.model_snapshots(model_id, snapshot_date desc);
+
+-- ============================================================
 -- POSTS (per-post metrics for VTFR / ER)
 -- ============================================================
 create table public.posts (

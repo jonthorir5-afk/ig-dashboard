@@ -57,6 +57,7 @@ export default async function handler(req) {
     if (modelsErr) throw modelsErr
 
     const results = { synced: 0, errors: [], details: [] }
+    const today = new Date().toISOString().split('T')[0]
 
     // Step 3: Match connected OF accounts to models by username
     for (const model of models) {
@@ -94,6 +95,30 @@ export default async function handler(req) {
       if (updateErr) {
         results.errors.push(`${model.name}: DB error - ${updateErr.message}`)
       } else {
+        // Track historical data in model_snapshots
+        const { data: existing } = await supabase
+          .from('model_snapshots')
+          .select('id')
+          .eq('model_id', model.id)
+          .eq('snapshot_date', today)
+          .limit(1)
+
+        if (existing && existing.length > 0) {
+          await supabase
+            .from('model_snapshots')
+            .update({ of_subs: subs })
+            .eq('id', existing[0].id)
+        } else {
+          await supabase
+            .from('model_snapshots')
+            .insert({
+              model_id: model.id,
+              snapshot_date: today,
+              of_subs: subs,
+              notes: 'Auto-synced via OF API'
+            })
+        }
+
         results.details.push({
           model: model.name,
           of_username: dbUsername,
