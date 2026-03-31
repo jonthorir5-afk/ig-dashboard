@@ -6,19 +6,19 @@
 
 -- ── MODELS ──
 insert into public.models (id, name, display_name, status, of_username, notes) values
-  (uuid_generate_v4(), 'ariana',    'Ariana',    'Active', 'ariana',    ''),
-  (uuid_generate_v4(), 'rose',      'Rose',      'Active', 'rose',      ''),
-  (uuid_generate_v4(), 'indibaby',  'Indibaby',  'Active', 'indibaby',  ''),
-  (uuid_generate_v4(), 'barbie',    'Barbie',    'Active', 'barbie',    ''),
-  (uuid_generate_v4(), 'franche',   'Franche',   'Active', 'franche',   ''),
-  (uuid_generate_v4(), 'moxie',     'Moxie',     'Active', 'moxie',     ''),
-  (uuid_generate_v4(), 'lola',      'Lola',      'Active', 'lola',      ''),
-  (uuid_generate_v4(), 'maple',     'Maple',     'Active', 'maple',     ''),
-  (uuid_generate_v4(), 'olivia',    'Olivia',    'Active', 'olivia',    ''),
-  (uuid_generate_v4(), 'bella',     'Bella',     'Active', 'bella',     ''),
-  (uuid_generate_v4(), 'angelmoon', 'AngelMoon', 'Active', 'angelmoon', ''),
-  (uuid_generate_v4(), 'dawn',      'Dawn',      'Active', 'dawn',      ''),
-  (uuid_generate_v4(), 'gia',       'Gia',       'Active', 'gia',       '');
+  (uuid_generate_v4(), 'ariana',    'Ariana',    'Active', 'arianaangelsxo',   ''),
+  (uuid_generate_v4(), 'rose',      'Rose',      'Active', 'porcelaingoirl',   ''),
+  (uuid_generate_v4(), 'indibaby',  'Indibaby',  'Active', 'indibaby',         ''),
+  (uuid_generate_v4(), 'barbie',    'Barbie',    'Active', 'ethebarbie',       ''),
+  (uuid_generate_v4(), 'franche',   'Franche',   'Active', 'franchegianinni',  ''),
+  (uuid_generate_v4(), 'moxie',     'Moxie',     'Active', 'ts.moxie',         ''),
+  (uuid_generate_v4(), 'lola',      'Lola',      'Active', 'lola.ray',         ''),
+  (uuid_generate_v4(), 'maple',     'Maple',     'Active', 'littlemapleberry', ''),
+  (uuid_generate_v4(), 'olivia',    'Olivia',    'Active', 'tsoliviaskye',     ''),
+  (uuid_generate_v4(), 'bella',     'Bella',     'Active', 'barbiebelladollz', ''),
+  (uuid_generate_v4(), 'angelmoon', 'AngelMoon', 'Active', 'angelmoonbloop',   ''),
+  (uuid_generate_v4(), 'dawn',      'Dawn',      'Active', 'dawnrivera',       ''),
+  (uuid_generate_v4(), 'gia',       'Gia',       'Active', 'tsgiacole',        '');
 
 -- ── ACCOUNTS ──
 -- We reference models by name, so we use subqueries
