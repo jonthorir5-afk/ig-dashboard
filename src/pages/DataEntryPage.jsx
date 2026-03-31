@@ -257,6 +257,40 @@ export default function DataEntryPage() {
     }
   }
 
+  const handleSyncAll = async () => {
+    setSyncing(true)
+    setSyncResults(null)
+    const allResults = { synced: 0, errors: [], details: [] }
+    for (const platform of ['twitter', 'reddit', 'onlyfans']) {
+      try {
+        const fetchOpts = { method: 'POST' }
+        if (platform === 'onlyfans') {
+          fetchOpts.headers = { 'Content-Type': 'application/json' }
+          fetchOpts.body = JSON.stringify({ action: 'sync' })
+        }
+        const res = await fetch(`/.netlify/functions/sync-${platform}`, fetchOpts)
+        const text = await res.text()
+        let data
+        try { data = JSON.parse(text) } catch { continue }
+        allResults.synced += data.synced || 0
+        if (data.errors?.length) allResults.errors.push(...data.errors.map(e => `[${platform}] ${e}`))
+        if (data.details?.length) allResults.details.push(...data.details.map(d => ({ ...d, _platform: platform })))
+        if (data.connectedAccountsList) allResults.connectedAccountsList = data.connectedAccountsList
+      } catch (err) {
+        allResults.errors.push(`[${platform}] ${err.message}`)
+      }
+    }
+    setSyncResults(allResults)
+    logAudit({
+      action: 'api_sync',
+      entity_type: 'platform',
+      entity_id: 'all',
+      details: `Sync All: ${allResults.synced} total synced, ${allResults.errors?.length || 0} errors`,
+      user_id: user?.id,
+    })
+    setSyncing(false)
+  }
+
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
   return (
@@ -293,35 +327,24 @@ export default function DataEntryPage() {
             Pull follower counts and metrics from platform APIs for all active accounts. Creates a snapshot for today.
           </p>
 
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               className="btn btn-primary"
-              onClick={() => handleApiSync('twitter')}
+              onClick={handleSyncAll}
               disabled={syncing}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem', padding: '0.65rem 1.5rem' }}
             >
-              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync Twitter/X'}
+              <RefreshCw size={18} className={syncing ? 'spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync All Platforms'}
             </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => handleApiSync('reddit')}
-              disabled={syncing}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync Reddit'}
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => handleApiSync('onlyfans')}
-              disabled={syncing}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              <RefreshCw size={16} className={syncing ? 'spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync OnlyFans'}
-            </button>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>or sync individually:</span>
+            <button className="btn btn-secondary" onClick={() => handleApiSync('twitter')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Twitter/X</button>
+            <button className="btn btn-secondary" onClick={() => handleApiSync('reddit')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Reddit</button>
+            <button className="btn btn-secondary" onClick={() => handleApiSync('onlyfans')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>OnlyFans</button>
           </div>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginTop: '0.75rem' }}>
+            Syncs run automatically every day at 6:00 AM UTC.
+          </p>
 
           {syncResults && (
             <div style={{ marginTop: '1.5rem' }}>
