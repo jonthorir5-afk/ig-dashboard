@@ -92,6 +92,24 @@ async function listTrackingLinksForAccount(accountId) {
   return links
 }
 
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length)
+  let index = 0
+
+  async function worker() {
+    while (index < items.length) {
+      const current = index++
+      results[current] = await mapper(items[current], current)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  )
+
+  return results
+}
+
 function normalizeTrackingLink(link, account) {
   const url = (link.campaignUrl || link.url || link.link || link.tracking_url || '').trim()
   const name = (link.campaignName || link.name || link.label || link.campaign_code || '').trim()
@@ -136,15 +154,28 @@ export default async function handler(req) {
     const results = { action, synced: 0, errors: [], details: [] }
     const today = new Date().toISOString().split('T')[0]
 
-    const trackingLinks = []
-    for (const account of ofAccounts) {
+    const modelUsernames = new Set(models.map(model => normalizeUsername(model.of_username)).filter(Boolean))
+    const relevantAccounts = ofAccounts.filter(account => {
+      const usernames = [
+        normalizeUsername(account.onlyfans_username || account.username),
+        normalizeUsername(account.onlyfans_user_data?.username),
+      ].filter(Boolean)
+
+      return usernames.some(username => modelUsernames.has(username))
+    })
+
+    const accountsToFetch = relevantAccounts.length > 0 ? relevantAccounts : ofAccounts
+    const trackingLinkResponses = await mapWithConcurrency(accountsToFetch, 4, async (account) => {
       try {
         const links = await listTrackingLinksForAccount(account.id)
-        trackingLinks.push(...links.map(link => normalizeTrackingLink(link, account)))
+        return links.map(link => normalizeTrackingLink(link, account))
       } catch (err) {
         results.errors.push(`Tracking links for ${account.display_name || account.id}: ${err.message}`)
+        return []
       }
-    }
+    })
+
+    const trackingLinks = trackingLinkResponses.flat()
 
     if (action === 'discover') {
       return json({
