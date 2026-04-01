@@ -385,7 +385,7 @@ export default function DataEntryPage() {
                       <MappingInput
                         acc={acc}
                         currentMapping={currentMapping}
-                        ofLinks={ofLinks}
+                        ofLinks={getScopedTrackingLinks(acc, models, ofLinks)}
                         onSave={async (linkName, linkDetails) => {
                           const newMap = {
                             tracking_link_name: linkName,
@@ -828,6 +828,36 @@ const cellInputStyle = {
   color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'right'
 }
 
+function normalizeTrackingToken(value) {
+  return (value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/^@/, '')
+    .replace(/\s+/g, '')
+}
+
+function getTrackingLinkModelSlug(link) {
+  const url = (link?.campaignUrl || link?.url || link?.link || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\/$/, '')
+  return url.match(/onlyfans\.com\/([^/?#]+)/i)?.[1] || ''
+}
+
+function getScopedTrackingLinks(account, models, ofLinks) {
+  const model = models.find(m => m.id === account.model_id)
+  const allowedSlugs = new Set([
+    normalizeTrackingToken(model?.of_username),
+    normalizeTrackingToken(model?.display_name),
+    normalizeTrackingToken(model?.name),
+  ].filter(Boolean))
+
+  if (!allowedSlugs.size) return ofLinks
+
+  const scopedLinks = ofLinks.filter(link => allowedSlugs.has(getTrackingLinkModelSlug(link)))
+  return scopedLinks.length > 0 ? scopedLinks : ofLinks
+}
+
 function NumField({ label, value, prev, onChange }) {
   const displayPrev = prev != null && prev !== '' ? `prev: ${prev}` : null
   return (
@@ -962,6 +992,24 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
               <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{link.url}</div>
             </button>
           ))}
+        </div>
+      )}
+      {isOpen && filteredLinks.length === 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 6px)',
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          padding: '0.8rem 0.9rem',
+          borderRadius: '10px',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-tertiary)',
+          fontSize: '0.8rem',
+          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.25)',
+        }}>
+          No matching tracking links for this account.
         </div>
       )}
     </div>
