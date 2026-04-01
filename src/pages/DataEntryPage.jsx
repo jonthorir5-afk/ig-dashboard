@@ -854,8 +854,7 @@ function getScopedTrackingLinks(account, models, ofLinks) {
 
   if (!allowedSlugs.size) return ofLinks
 
-  const scopedLinks = ofLinks.filter(link => allowedSlugs.has(getTrackingLinkModelSlug(link)))
-  return scopedLinks.length > 0 ? scopedLinks : ofLinks
+  return ofLinks.filter(link => allowedSlugs.has(getTrackingLinkModelSlug(link)))
 }
 
 function NumField({ label, value, prev, onChange }) {
