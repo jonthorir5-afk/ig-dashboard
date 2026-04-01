@@ -11,19 +11,23 @@ const OF_API_BASE = 'https://app.onlyfansapi.com/api'
 async function ofFetch(path, timeoutMs = 20000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+
   try {
     const res = await fetch(`${OF_API_BASE}${path}`, {
       headers: {
-        'Authorization': `Bearer ${OF_API_KEY}`,
+        Authorization: `Bearer ${OF_API_KEY}`,
         'Content-Type': 'application/json',
       },
       signal: controller.signal,
     })
+
     clearTimeout(timer)
+
     if (!res.ok) {
       const text = await res.text()
       throw new Error(`OF API ${res.status}: ${text.slice(0, 300)}`)
     }
+
     return res.json()
   } catch (err) {
     clearTimeout(timer)
@@ -33,7 +37,77 @@ async function ofFetch(path, timeoutMs = 20000) {
 }
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+async function parseBody(req) {
+  try {
+    return await req.json()
+  } catch {
+    try {
+      const text = await req.text()
+      return text ? JSON.parse(text) : {}
+    } catch {
+      return {}
+    }
+  }
+}
+
+function normalizeUsername(value) {
+  return (value || '').toLowerCase().trim().replace(/^@/, '')
+}
+
+function getSubscriberCount(account) {
+  const userData = account.onlyfans_user_data || account
+  return userData.subscribersCount
+    || userData.activeSubscribersCount
+    || userData.subscribedCount
+    || userData.fans_count
+    || account.subscribersCount
+    || 0
+}
+
+async function listTrackingLinksForAccount(accountId) {
+  const links = []
+  let offset = 0
+  const limit = 100
+
+  while (true) {
+    const res = await ofFetch(`/${accountId}/tracking-links?limit=${limit}&offset=${offset}`)
+    const payload = res.data || res
+    const batch = payload.list || payload.items || payload.data || payload.results || []
+
+    if (!Array.isArray(batch) || batch.length === 0) break
+
+    links.push(...batch)
+
+    const hasMore = Boolean(payload.hasMore) || Boolean(payload.has_more)
+    if (!hasMore && batch.length < limit) break
+    offset += batch.length
+  }
+
+  return links
+}
+
+function normalizeTrackingLink(link, account) {
+  const url = (link.campaignUrl || link.url || link.link || link.tracking_url || '').trim()
+  const name = (link.campaignName || link.name || link.label || link.campaign_code || '').trim()
+
+  return {
+    ...link,
+    accountId: account.id,
+    accountName: account.display_name || account.name || account.onlyfans_username || account.username || '',
+    accountUsername: account.onlyfans_username || account.username || account.onlyfans_user_data?.username || '',
+    id: link.id || link.trackingLinkId || link.tracking_link_id || `${account.id}:${name || url}`,
+    campaignName: name,
+    campaignUrl: url,
+    clicks: Number(link.clicks ?? link.click_count ?? link.clicksCount ?? 0),
+    subscribers: Number(link.subscribers ?? link.subscriber_count ?? link.subscribersCount ?? 0),
+    revenue: Number(link.revenue ?? link.totalRevenue ?? link.revenue_total ?? 0),
+  }
 }
 
 export default async function handler(req) {
@@ -41,35 +115,59 @@ export default async function handler(req) {
   if (!OF_API_KEY) return json({ error: 'ONLYFANS_API_KEY not configured' }, 500)
 
   try {
-    // Step 1: Get all connected OF accounts (these have real subscriber data)
+    const body = await parseBody(req)
+    const action = body.action || 'sync'
+
     const accountsRes = await ofFetch('/accounts')
     const ofAccounts = accountsRes.data || accountsRes
+
     if (!Array.isArray(ofAccounts) || ofAccounts.length === 0) {
       return json({ synced: 0, errors: ['No OF accounts connected at app.onlyfansapi.com'] })
     }
 
-    // Step 2: Get all models with an of_username
     const { data: models, error: modelsErr } = await supabase
       .from('models')
-      .select('id, name, of_username')
+      .select('id, name, display_name, of_username')
       .eq('status', 'Active')
       .not('of_username', 'is', null)
+
     if (modelsErr) throw modelsErr
 
-    const results = { synced: 0, errors: [], details: [] }
+    const results = { action, synced: 0, errors: [], details: [] }
     const today = new Date().toISOString().split('T')[0]
 
-    // Step 3: Match connected OF accounts to models by username
+    const trackingLinks = []
+    for (const account of ofAccounts) {
+      try {
+        const links = await listTrackingLinksForAccount(account.id)
+        trackingLinks.push(...links.map(link => normalizeTrackingLink(link, account)))
+      } catch (err) {
+        results.errors.push(`Tracking links for ${account.display_name || account.id}: ${err.message}`)
+      }
+    }
+
+    if (action === 'discover') {
+      return json({
+        action,
+        synced: 0,
+        errors: results.errors,
+        trackingLinks,
+        connectedAccounts: ofAccounts.map(account => ({
+          id: account.id,
+          name: account.display_name || account.name || account.onlyfans_username || account.username || account.id,
+          username: account.onlyfans_username || account.username || account.onlyfans_user_data?.username || '',
+        })),
+      })
+    }
+
     for (const model of models) {
-      if (!model.of_username) continue
-      const dbUsername = model.of_username.toLowerCase().replace('@', '').trim()
+      const dbUsername = normalizeUsername(model.of_username)
       if (!dbUsername) continue
 
-      // Find matching connected account
-      const matchedAccount = ofAccounts.find(a => {
-        const apiUsername = (a.onlyfans_username || a.username || '').toLowerCase().trim()
-        const apiUserData = a.onlyfans_user_data?.username?.toLowerCase().trim() || ''
-        const apiName = (a.display_name || a.name || '').toLowerCase().trim()
+      const matchedAccount = ofAccounts.find(account => {
+        const apiUsername = normalizeUsername(account.onlyfans_username || account.username)
+        const apiUserData = normalizeUsername(account.onlyfans_user_data?.username)
+        const apiName = normalizeUsername(account.display_name || account.name)
         return apiUsername === dbUsername || apiUserData === dbUsername || apiName.includes(dbUsername)
       })
 
@@ -78,15 +176,7 @@ export default async function handler(req) {
         continue
       }
 
-      // Get subscriber count from the connected account data
-      const userData = matchedAccount.onlyfans_user_data || matchedAccount
-      const subs = userData.subscribersCount
-        || userData.activeSubscribersCount
-        || userData.subscribedCount
-        || userData.fans_count
-        || matchedAccount.subscribersCount
-        || 0
-
+      const subs = getSubscriberCount(matchedAccount)
       const { error: updateErr } = await supabase
         .from('models')
         .update({ of_subs: subs })
@@ -94,65 +184,83 @@ export default async function handler(req) {
 
       if (updateErr) {
         results.errors.push(`${model.name}: DB error - ${updateErr.message}`)
-      } else {
-        // Track historical data in model_snapshots
-        const { data: existing } = await supabase
-          .from('model_snapshots')
-          .select('id')
-          .eq('model_id', model.id)
-          .eq('snapshot_date', today)
-          .limit(1)
-
-        if (existing && existing.length > 0) {
-          await supabase
-            .from('model_snapshots')
-            .update({ of_subs: subs })
-            .eq('id', existing[0].id)
-        } else {
-          await supabase
-            .from('model_snapshots')
-            .insert({
-              model_id: model.id,
-              snapshot_date: today,
-              of_subs: subs,
-              notes: 'Auto-synced via OF API'
-            })
-        }
-
-        results.details.push({
-          model: model.name,
-          of_username: dbUsername,
-          matched_to: matchedAccount.display_name || matchedAccount.onlyfans_username || 'unknown',
-          subscribers: subs,
-        })
-        results.synced++
+        continue
       }
+
+      const { data: existingSnapshot } = await supabase
+        .from('model_snapshots')
+        .select('id')
+        .eq('model_id', model.id)
+        .eq('snapshot_date', today)
+        .limit(1)
+
+      if (existingSnapshot && existingSnapshot.length > 0) {
+        await supabase
+          .from('model_snapshots')
+          .update({ of_subs: subs })
+          .eq('id', existingSnapshot[0].id)
+      } else {
+        await supabase
+          .from('model_snapshots')
+          .insert({
+            model_id: model.id,
+            snapshot_date: today,
+            of_subs: subs,
+            notes: 'Auto-synced via OF API',
+          })
+      }
+
+      results.details.push({
+        model: model.name,
+        of_username: dbUsername,
+        matched_to: matchedAccount.display_name || matchedAccount.onlyfans_username || 'unknown',
+        subscribers: subs,
+      })
+      results.synced++
     }
 
-    // Also list unmatched OF accounts for reference
-    const matchedUsernames = new Set(results.details.map(d => d.of_username))
-    const unmatchedOF = ofAccounts.filter(a => {
-      const u = (a.onlyfans_username || a.username || '').toLowerCase()
-      return u && !matchedUsernames.has(u)
-    }).map(a => ({
-      name: a.display_name || a.name,
-      username: a.onlyfans_username || a.username,
-      subscribers: a.onlyfans_user_data?.subscribersCount || 0,
-    }))
+    const { data: mappings, error: mappingsErr } = await supabase
+      .from('of_link_mappings')
+      .select('model_id, account_id, tracking_link_name, tracking_link_url')
+
+    if (mappingsErr) throw mappingsErr
+
+    for (const mapping of mappings || []) {
+      const matchedLink = trackingLinks.find(link =>
+        (mapping.tracking_link_name && link.campaignName === mapping.tracking_link_name) ||
+        (mapping.tracking_link_url && link.campaignUrl === mapping.tracking_link_url)
+      )
+
+      if (!matchedLink) continue
+
+      await supabase
+        .from('of_tracking')
+        .upsert({
+          model_id: mapping.model_id,
+          account_id: mapping.account_id,
+          tracking_link_name: mapping.tracking_link_name,
+          tracking_link_url: matchedLink.campaignUrl,
+          snapshot_date: today,
+          clicks: matchedLink.clicks,
+          subscribers: matchedLink.subscribers,
+          revenue_total: matchedLink.revenue,
+          revenue_per_subscriber: matchedLink.subscribers > 0 ? matchedLink.revenue / matchedLink.subscribers : 0,
+          revenue_per_click: matchedLink.clicks > 0 ? matchedLink.revenue / matchedLink.clicks : 0,
+        }, { onConflict: 'model_id,tracking_link_name,snapshot_date' })
+    }
 
     return json({
       ...results,
+      trackingLinks,
       connectedAccounts: ofAccounts.length,
-      // Debug: show all connected accounts with their username fields
-      connectedAccountsList: ofAccounts.map(a => ({
-        id: a.id,
-        display_name: a.display_name,
-        onlyfans_username: a.onlyfans_username,
-        username: a.username,
-        user_data_username: a.onlyfans_user_data?.username,
-        subscribersCount: a.onlyfans_user_data?.subscribersCount || a.subscribersCount || 0,
+      connectedAccountsList: ofAccounts.map(account => ({
+        id: account.id,
+        display_name: account.display_name,
+        onlyfans_username: account.onlyfans_username,
+        username: account.username,
+        user_data_username: account.onlyfans_user_data?.username,
+        subscribersCount: getSubscriberCount(account),
       })),
-      unmatchedOF,
     })
   } catch (err) {
     return json({ synced: 0, errors: [err.message] })
