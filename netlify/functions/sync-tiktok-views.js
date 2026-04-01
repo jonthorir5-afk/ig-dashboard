@@ -74,10 +74,45 @@ export default async function handler(req) {
 
         const videos = await runRes.json()
 
+        // Debug: capture first video's structure to help diagnose field names
+        if (videos.length > 0 && i === 0) {
+          const sample = videos[0]
+          results._debug = {
+            totalVideos: videos.length,
+            sampleAuthorFields: {
+              'authorMeta.name': sample.authorMeta?.name,
+              'authorMeta.uniqueId': sample.authorMeta?.uniqueId,
+              'authorMeta.nickName': sample.authorMeta?.nickName,
+              'authorMeta.id': sample.authorMeta?.id,
+              'authorMeta.fans': sample.authorMeta?.fans,
+              'author.uniqueId': sample.author?.uniqueId,
+              'author': typeof sample.author === 'string' ? sample.author : undefined,
+              'authorUniqueId': sample.authorUniqueId,
+            },
+            sampleTimeFields: {
+              'createTimeISO': sample.createTimeISO,
+              'createTime': sample.createTime,
+              'createTimeType': typeof sample.createTime,
+            },
+            sampleStatFields: {
+              'playCount': sample.playCount,
+              'diggCount': sample.diggCount,
+              'commentCount': sample.commentCount,
+              'shareCount': sample.shareCount,
+            },
+            dbHandles: batchAccounts.map(a => a.handle),
+          }
+        }
+
         // Group videos by author and bucket into 7d/30d windows
         const statsByUser = {}
         for (const video of videos) {
+          // TikTok scrapers use various field names for the username:
+          // - authorMeta.uniqueId = the actual TikTok handle (e.g. "porcelain.ts.girl")
+          // - authorMeta.name = can be display name OR username depending on scraper version
+          // - author.uniqueId = alternative location
           const author = (
+            video.authorMeta?.uniqueId ||
             video.authorMeta?.name ||
             video.author?.uniqueId ||
             video.authorUniqueId ||
@@ -85,12 +120,18 @@ export default async function handler(req) {
           ).toLowerCase()
           if (!author) continue
 
-          // Parse video creation time
+          // Parse video creation time — handle both unix timestamps and ISO strings
           const createTime = video.createTimeISO || video.createTime
           if (!createTime) continue
-          const videoDate = new Date(
-            typeof createTime === 'number' ? createTime * 1000 : createTime
-          )
+          let videoDate
+          if (typeof createTime === 'number') {
+            videoDate = new Date(createTime * 1000)
+          } else if (typeof createTime === 'string' && /^\d+$/.test(createTime)) {
+            // String-encoded unix timestamp (e.g. "1711900000")
+            videoDate = new Date(parseInt(createTime, 10) * 1000)
+          } else {
+            videoDate = new Date(createTime)
+          }
           if (isNaN(videoDate.getTime())) continue
 
           // Skip videos older than 30 days
@@ -130,6 +171,9 @@ export default async function handler(req) {
           }
         }
 
+        // Debug: show which authors were found in scraper output
+        results._authorsFound = Object.keys(statsByUser)
+
         // Update snapshots for each account in this batch
         for (const account of batchAccounts) {
           const handle = account.handle.replace('@', '').toLowerCase()
@@ -137,7 +181,7 @@ export default async function handler(req) {
 
           if (!userData) {
             results.skipped++
-            results.errors.push(`@${handle}: no videos found in Apify results`)
+            results.errors.push(`@${handle}: no videos found. Authors in data: [${Object.keys(statsByUser).join(', ')}]`)
             continue
           }
 

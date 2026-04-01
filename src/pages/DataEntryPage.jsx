@@ -413,10 +413,17 @@ export default function DataEntryPage() {
                         <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
                           {syncResults.details.map((d, i) => (
                             <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
-                              {d.handle && `@${d.handle} — ${d.action}, `}
-                              {d.followers != null && `${d.followers.toLocaleString()} followers`}
-                              {d.karma != null && `${d.karma.toLocaleString()} karma`}
+                              {d.handle && `@${d.handle} — ${d.action}`}
+                              {d.followers != null && `, ${d.followers.toLocaleString()} followers`}
+                              {d.karma != null && `, ${d.karma.toLocaleString()} karma`}
+                              {d.views_7d != null && `, ${d.views_7d.toLocaleString()} views (7d)`}
+                              {d.views_30d != null && `, ${d.views_30d.toLocaleString()} views (30d)`}
+                              {d.views != null && !d.views_7d && `, ${d.views.toLocaleString()} views`}
+                              {d.tweets_7d != null && `, ${d.tweets_7d} tweets`}
+                              {d.tweets != null && !d.tweets_7d && `, ${d.tweets} tweets`}
+                              {d.videos_7d != null && `, ${d.videos_7d} videos`}
                               {d.model && d.subscribers != null && `${d.model} (@${d.of_username || ''}) — ${d.subscribers.toLocaleString()} subscribers`}
+                              {d._platform && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>[{d._platform}]</span>}
                             </div>
                           ))}
                         </div>
@@ -445,6 +452,20 @@ export default function DataEntryPage() {
                       <p key={i} style={{ fontSize: '0.8rem', color: 'var(--accent-danger)' }}>{e}</p>
                     ))}
                   </div>
+                )}
+
+                {syncResults._debug && (
+                  <details style={{ marginTop: '0.75rem' }}>
+                    <summary style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', cursor: 'pointer' }}>Debug info</summary>
+                    <pre style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap', maxHeight: '300px', overflow: 'auto', marginTop: '0.5rem' }}>
+                      {JSON.stringify(syncResults._debug, null, 2)}
+                    </pre>
+                  </details>
+                )}
+                {syncResults._authorsFound && (
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
+                    Authors found in scrape: {syncResults._authorsFound.join(', ') || 'none'}
+                  </p>
                 )}
               </div>
             </div>
