@@ -85,6 +85,7 @@ create table public.accounts (
   model_id uuid not null references public.models(id) on delete cascade,
   platform text not null check (platform in ('instagram', 'twitter', 'reddit', 'tiktok')),
   handle text not null,
+  of_username_override text,
   account_type text not null default 'Primary' check (account_type in ('Primary', 'Farm')),
   account_url text,
   status text not null default 'Active' check (status in ('Active', 'Paused', 'Suspended', 'Banned')),

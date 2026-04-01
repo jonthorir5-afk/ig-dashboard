@@ -847,6 +847,7 @@ function getTrackingLinkModelSlug(link) {
 function getScopedTrackingLinks(account, models, ofLinks) {
   const model = models.find(m => m.id === account.model_id)
   const allowedSlugs = new Set([
+    normalizeTrackingToken(account?.of_username_override),
     normalizeTrackingToken(model?.of_username),
     normalizeTrackingToken(model?.display_name),
     normalizeTrackingToken(model?.name),

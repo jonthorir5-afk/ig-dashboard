@@ -40,6 +40,7 @@ create table accounts (
   model_id uuid not null references models(id) on delete cascade,
   platform text not null check (platform in ('instagram', 'twitter', 'reddit', 'tiktok')),
   handle text not null,
+  of_username_override text,
   account_url text,
   account_type text not null default 'Primary' check (account_type in ('Primary', 'Secondary', 'Backup', 'Farm')),
   status text not null default 'Active' check (status in ('Active', 'Shadowbanned', 'Suspended', 'Warming Up')),

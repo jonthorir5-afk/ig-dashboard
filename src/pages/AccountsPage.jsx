@@ -24,7 +24,7 @@ export default function AccountsPage() {
 
   const [form, setForm] = useState({
     model_id: '', platform: 'instagram', handle: '', account_url: '',
-    account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: ''
+    of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: ''
   })
 
   const load = async () => {
@@ -63,7 +63,7 @@ export default function AccountsPage() {
   const handleEdit = (acc) => {
     setForm({
       model_id: acc.model_id, platform: acc.platform, handle: acc.handle,
-      account_url: acc.account_url || '', account_type: acc.account_type,
+      account_url: acc.account_url || '', of_username_override: acc.of_username_override || '', account_type: acc.account_type,
       status: acc.status, health: acc.health, assigned_operator: acc.assigned_operator || ''
     })
     setEditing(acc.id)
@@ -99,7 +99,7 @@ export default function AccountsPage() {
           {canManage && (
             <button className="btn btn-primary" onClick={() => {
               setShowForm(true); setEditing(null)
-              setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
+              setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
             }}>
               <Plus size={16} /> Add Account
             </button>
@@ -209,6 +209,10 @@ export default function AccountsPage() {
               <div>
                 <label style={labelStyle}>Account URL</label>
                 <input value={form.account_url} onChange={e => setForm({ ...form, account_url: e.target.value })} placeholder="https://instagram.com/..." style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>OF Username Override</label>
+                <input value={form.of_username_override} onChange={e => setForm({ ...form, of_username_override: e.target.value })} placeholder="Optional, e.g. ethebarbieuncensored" style={inputStyle} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
