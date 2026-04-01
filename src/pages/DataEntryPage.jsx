@@ -396,7 +396,7 @@ export default function DataEntryPage() {
                           try {
                             const saved = await saveLinkMapping(newMap)
                             setOfMappings(prev => {
-                              const filtered = prev.filter(m => m.account_id !== acc.id && m.tracking_link_name !== linkName)
+                              const filtered = prev.filter(m => m.account_id !== acc.id)
                               return [...filtered, saved]
                             })
                           } catch (err) {
@@ -930,17 +930,7 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
     setText(val)
     setIsOpen(true)
 
-    const cleanVal = val.toLowerCase().trim().replace(/\/$/, '')
-
-    const linkDetails = normalizedLinks.find(link => (
-      link.normalizedName === cleanVal ||
-      link.normalizedUrl === cleanVal ||
-      (!!link.shortCode && link.shortCode === cleanVal)
-    ))
-
-    if (linkDetails && cleanVal) {
-      selectLink(linkDetails)
-    } else if (val.includes('onlyfans.com') && val.length > 25) {
+    if (val.includes('onlyfans.com') && val.length > 25) {
       console.warn('URL pasted but NOT FOUND natively in the API downloaded tracking links: ', val)
     }
   }

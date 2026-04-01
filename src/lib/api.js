@@ -305,7 +305,7 @@ export async function saveLinkMapping(mapping) {
   if (isDemoMode()) return mapping
   const { data, error } = await supabase
     .from('of_link_mappings')
-    .upsert(mapping, { onConflict: 'tracking_link_name' })
+    .upsert(mapping, { onConflict: 'account_id' })
     .select()
     .single()
   if (error) throw error
@@ -347,5 +347,4 @@ export async function getExecOverview() {
     ofTracking: ofTrackingRes.data || [],
   }
 }
-
 

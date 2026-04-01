@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.of_link_mappings (
   model_id uuid REFERENCES public.models(id) ON DELETE CASCADE,
   account_id uuid REFERENCES public.accounts(id) ON DELETE CASCADE,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(tracking_link_name)
+  UNIQUE(account_id)
 );
 
 -- Enable RLS
