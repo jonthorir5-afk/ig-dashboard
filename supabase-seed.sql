@@ -33,12 +33,16 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='ariana'), 'twitter', 'AriAngelsXo',     'Farm',    'Active', 'Limited'),
   ((select id from models where name='ariana'), 'twitter', 'Isabelacasiu',    'Farm',    'Active', 'Clean');
 
--- ROSE — 3 X accounts + 1 Reddit
+-- ROSE — 3 X accounts + 1 Reddit + 4 TikTok
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
-  ((select id from models where name='rose'), 'twitter', 'porcelaingoirl',   'Primary', 'Active', 'Clean'),
-  ((select id from models where name='rose'), 'twitter', 'TsPorcelainbby',   'Farm',    'Active', 'Clean'),
-  ((select id from models where name='rose'), 'twitter', 'valeriapasion7',   'Farm',    'Active', 'Clean'),
-  ((select id from models where name='rose'), 'reddit',  'u/porcelaingoirl', 'Primary', 'Active', 'Clean');
+  ((select id from models where name='rose'), 'twitter', 'porcelaingoirl',      'Primary', 'Active', 'Clean'),
+  ((select id from models where name='rose'), 'twitter', 'TsPorcelainbby',      'Farm',    'Active', 'Clean'),
+  ((select id from models where name='rose'), 'twitter', 'valeriapasion7',      'Farm',    'Active', 'Clean'),
+  ((select id from models where name='rose'), 'reddit',  'u/porcelaingoirl',    'Primary', 'Active', 'Clean'),
+  ((select id from models where name='rose'), 'tiktok',  'porcelain.ts.girl',   'Primary', 'Active', 'Clean'),
+  ((select id from models where name='rose'), 'tiktok',  'ts.porcelain.bby',    'Farm',    'Active', 'Clean'),
+  ((select id from models where name='rose'), 'tiktok',  'tsporcelain',         'Farm',    'Active', 'Clean'),
+  ((select id from models where name='rose'), 'tiktok',  'rose.ts3',            'Farm',    'Active', 'Clean');
 
 -- INDIBABY — 5 X accounts
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
