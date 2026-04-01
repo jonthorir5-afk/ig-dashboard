@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download, BarChart3 } from 'lucide-react'
+import { Eye, Users, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download, BarChart3 } from 'lucide-react'
 import { getExecOverview, getAllSnapshotHistory } from '../lib/api'
-import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
+import { formatNumber, getSnapshotViews, healthColor, exportToCSV } from '../lib/metrics'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 import BarChartComponent from '../components/charts/BarChart'
 
@@ -40,12 +40,17 @@ export default function ExecOverview() {
           const platAccts = modelAccounts.filter(a => a.platform === p)
           if (!platAccts.length) { row[p] = null; continue }
           let totalFollowers = 0
+          let totalViews = 0
           let hasData = false
           for (const acc of platAccts) {
             const snap = latestSnap[acc.id]
-            if (snap) { totalFollowers += snap.followers || 0; hasData = true }
+            if (snap) {
+              totalFollowers += snap.followers || 0
+              totalViews += getSnapshotViews(snap)
+              hasData = true
+            }
           }
-          row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null }
+          row[p] = { accounts: platAccts.length, followers: hasData ? totalFollowers : null, views: totalViews || null }
         }
         row.of_subs = model.of_subs > 0 ? model.of_subs : null
         return row
@@ -91,11 +96,11 @@ export default function ExecOverview() {
 
     const totalFollowers = latestArr.reduce((sum, s) => sum + (s.followers || 0), 0)
     const prevTotalFollowers = prevArr.reduce((sum, s) => sum + (s.followers || 0), 0)
-    const totalClicks = latestArr.reduce((sum, s) => sum + getSnapshotClicks(s), 0)
-    const prevClicks = prevArr.reduce((sum, s) => sum + getSnapshotClicks(s), 0)
+    const totalViews = latestArr.reduce((sum, s) => sum + getSnapshotViews(s), 0)
+    const prevViews = prevArr.reduce((sum, s) => sum + getSnapshotViews(s), 0)
 
     const followersTrend = prevTotalFollowers ? ((totalFollowers - prevTotalFollowers) / prevTotalFollowers * 100).toFixed(1) : null
-    const clicksTrend = prevClicks ? ((totalClicks - prevClicks) / prevClicks * 100).toFixed(1) : null
+    const viewsTrend = prevViews ? ((totalViews - prevViews) / prevViews * 100).toFixed(1) : null
 
     // Per-platform followers and views (total from latest snapshots)
     const platformFollowers = {}
@@ -113,15 +118,17 @@ export default function ExecOverview() {
       }
     }
 
-    // Top & bottom models by reach
-    const modelReach = {}
+    // Top & bottom models by followers (with views as additional data)
+    const modelMetrics = {}
     for (const s of latestArr) {
       const modelName = s.account?.model?.name || 'Unknown'
-      modelReach[modelName] = (modelReach[modelName] || 0) + getSnapshotViews(s)
+      if (!modelMetrics[modelName]) modelMetrics[modelName] = { followers: 0, views: 0 }
+      modelMetrics[modelName].followers += s.followers || 0
+      modelMetrics[modelName].views += getSnapshotViews(s)
     }
-    const modelRanking = Object.entries(modelReach)
-      .map(([name, reach]) => ({ name, reach }))
-      .sort((a, b) => b.reach - a.reach)
+    const modelRanking = Object.entries(modelMetrics)
+      .map(([name, m]) => ({ name, followers: m.followers, views: m.views }))
+      .sort((a, b) => b.followers - a.followers)
 
     // Flagged accounts
     const flagged = accounts.filter(a =>
@@ -138,9 +145,9 @@ export default function ExecOverview() {
       activeAccounts: activeAccounts.length,
       platformCounts,
       totalFollowers,
-      totalClicks,
+      totalViews,
       followersTrend,
-      clicksTrend,
+      viewsTrend,
       topModels: modelRanking.slice(0, 3),
       bottomModels: modelRanking.slice(-3).reverse(),
       flagged,
@@ -156,10 +163,9 @@ export default function ExecOverview() {
     if (!history.length) return []
     const dateMap = {}
     for (const s of history) {
-      if (!dateMap[s.snapshot_date]) dateMap[s.snapshot_date] = { date: s.snapshot_date, followers: 0, views: 0, clicks: 0 }
+      if (!dateMap[s.snapshot_date]) dateMap[s.snapshot_date] = { date: s.snapshot_date, followers: 0, views: 0 }
       dateMap[s.snapshot_date].followers += s.followers || 0
       dateMap[s.snapshot_date].views += getSnapshotViews(s)
-      dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
     }
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
   }, [history])
@@ -167,7 +173,7 @@ export default function ExecOverview() {
   // Model bar chart data
   const modelBarData = useMemo(() => {
     if (!stats?.modelRanking) return []
-    return stats.modelRanking.map(m => ({ name: m.name, views: m.reach }))
+    return stats.modelRanking.map(m => ({ name: m.name, followers: m.followers, views: m.views }))
   }, [stats])
 
   if (loading) {
@@ -227,8 +233,7 @@ export default function ExecOverview() {
                 model: s.account?.model?.name,
                 date: s.snapshot_date,
                 followers: s.followers,
-                views: getSnapshotViews(s),
-                clicks: getSnapshotClicks(s),
+                views_7d: getSnapshotViews(s),
                 health: s.account?.health
               }))
               exportToCSV(rows, `overview-${new Date().toISOString().split('T')[0]}.csv`)
@@ -249,10 +254,10 @@ export default function ExecOverview() {
           trend={stats.followersTrend}
         />
         <MetricCard
-          icon={MousePointerClick} iconClass="engagement"
-          label="Total Link Clicks (7d)"
-          value={formatNumber(stats.totalClicks)}
-          trend={stats.clicksTrend}
+          icon={Eye} iconClass="engagement"
+          label="Total Views (7d)"
+          value={formatNumber(stats.totalViews)}
+          trend={stats.viewsTrend}
         />
         <MetricCard
           icon={AlertTriangle} iconClass="winners"
@@ -352,7 +357,12 @@ export default function ExecOverview() {
                             <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                               {row[p].followers != null ? formatNumber(row[p].followers) : '—'}
                             </span>
-                            <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>
+                            {row[p].views != null && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+                                {formatNumber(row[p].views)} views
+                              </span>
+                            )}
+                            <span style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)' }}>
                               {row[p].accounts} acct{row[p].accounts !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -382,12 +392,11 @@ export default function ExecOverview() {
       {dailyTrend.length > 1 && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Network Views & Clicks (30d)</h3>
+            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Network Views (30d)</h3>
             <TrendChart
               data={dailyTrend}
               lines={[
                 { key: 'views', label: 'Views', color: COLORS.primary },
-                { key: 'clicks', label: 'Clicks', color: COLORS.warning },
               ]}
               height={240}
             />
@@ -403,17 +412,20 @@ export default function ExecOverview() {
         </div>
       )}
 
-      {/* Model Reach Comparison */}
+      {/* Model Follower Comparison */}
       {modelBarData.length > 0 && (
         <div className="glass-panel" style={{ padding: '1.25rem' }}>
           <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <BarChart3 size={18} color="var(--accent-primary)" /> Model Reach Comparison (7d)
+            <BarChart3 size={18} color="var(--accent-primary)" /> Model Comparison
           </h3>
           <BarChartComponent
             data={modelBarData}
-            bars={[{ key: 'views', label: 'Views', color: COLORS.primary }]}
+            bars={[
+              { key: 'followers', label: 'Followers', color: COLORS.success },
+              { key: 'views', label: 'Views (7d)', color: COLORS.primary },
+            ]}
             layout="horizontal"
-            height={Math.max(200, modelBarData.length * 40)}
+            height={Math.max(200, modelBarData.length * 45)}
           />
         </div>
       )}
@@ -427,9 +439,12 @@ export default function ExecOverview() {
           </h3>
           {stats.topModels.length === 0 && <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No data yet</p>}
           {stats.topModels.map((m, i) => (
-            <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid var(--border-color)' : 'none' }}>
+            <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid var(--border-color)' : 'none' }}>
               <span style={{ color: 'var(--text-primary)' }}>{i + 1}. {m.name}</span>
-              <span style={{ color: 'var(--accent-success)', fontWeight: 600 }}>{formatNumber(m.reach)} views</span>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ color: 'var(--accent-success)', fontWeight: 600 }}>{formatNumber(m.followers)}</span>
+                {m.views > 0 && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginLeft: '0.5rem' }}>{formatNumber(m.views)} views</span>}
+              </div>
             </div>
           ))}
         </div>
@@ -441,9 +456,12 @@ export default function ExecOverview() {
           </h3>
           {stats.bottomModels.length === 0 && <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No data yet</p>}
           {stats.bottomModels.map((m, i) => (
-            <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid var(--border-color)' : 'none' }}>
+            <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid var(--border-color)' : 'none' }}>
               <span style={{ color: 'var(--text-primary)' }}>{m.name}</span>
-              <span style={{ color: 'var(--accent-danger)', fontWeight: 600 }}>{formatNumber(m.reach)} views</span>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ color: 'var(--accent-danger)', fontWeight: 600 }}>{formatNumber(m.followers)}</span>
+                {m.views > 0 && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginLeft: '0.5rem' }}>{formatNumber(m.views)} views</span>}
+              </div>
             </div>
           ))}
         </div>
