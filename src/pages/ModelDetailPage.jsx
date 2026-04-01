@@ -47,6 +47,27 @@ export default function ModelDetailPage() {
       + (s.tw_tweets_posted_7d || 0) + (s.rd_posts_7d || 0) + (s.tt_videos_posted_7d || 0)
   }, 0)
 
+  // Per-platform combined stats (for platforms with multiple accounts)
+  const platformStats = useMemo(() => {
+    const result = {}
+    for (const platform of ['twitter', 'reddit', 'instagram', 'tiktok']) {
+      const platAccounts = accounts.filter(a => a.platform === platform)
+      if (!platAccounts.length) continue
+      const platSnaps = platAccounts.map(a => latestByAccount[a.id]).filter(Boolean)
+      result[platform] = {
+        accounts: platAccounts,
+        followers: platSnaps.reduce((sum, s) => sum + (s.followers || 0), 0),
+        views7d: platSnaps.reduce((sum, s) => sum + getSnapshotViews(s), 0),
+        likes7d: platSnaps.reduce((sum, s) => sum + (s.tt_likes_7d || s.tw_likes_7d || 0), 0),
+        perAccount: platAccounts.map(a => ({
+          account: a,
+          snap: latestByAccount[a.id] || null,
+        })),
+      }
+    }
+    return result
+  }, [accounts, latestByAccount])
+
   // Build trend chart data: aggregate by date
   const trendData = useMemo(() => {
     const dateMap = {}
@@ -164,6 +185,71 @@ export default function ModelDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Per-platform combined stats (shown for any platform with accounts) */}
+      {Object.entries(platformStats).map(([platform, pStats]) => (
+        <div key={platform} className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', textTransform: 'capitalize' }}>
+            {platform === 'twitter' ? 'Twitter / X' : platform} — Combined Stats
+          </h3>
+
+          {/* Totals row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div className="metric-card glass-panel" style={{ padding: '0.75rem 1rem' }}>
+              <div className="metric-data">
+                <p className="metric-label">Total Followers</p>
+                <h3 className="metric-value" style={{ fontSize: '1.4rem' }}>{formatNumber(pStats.followers)}</h3>
+                <span className="metric-text">{pStats.accounts.length} accounts</span>
+              </div>
+            </div>
+            <div className="metric-card glass-panel" style={{ padding: '0.75rem 1rem' }}>
+              <div className="metric-data">
+                <p className="metric-label">Total Views (7d)</p>
+                <h3 className="metric-value" style={{ fontSize: '1.4rem' }}>{formatNumber(pStats.views7d)}</h3>
+              </div>
+            </div>
+            <div className="metric-card glass-panel" style={{ padding: '0.75rem 1rem' }}>
+              <div className="metric-data">
+                <p className="metric-label">Total Likes (7d)</p>
+                <h3 className="metric-value" style={{ fontSize: '1.4rem' }}>{formatNumber(pStats.likes7d)}</h3>
+              </div>
+            </div>
+          </div>
+
+          {/* Per-account breakdown */}
+          <table className="accounts-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Account</th>
+                <th style={{ textAlign: 'left' }}>Type</th>
+                <th style={{ textAlign: 'right' }}>Followers</th>
+                <th style={{ textAlign: 'right' }}>Views 7d</th>
+                <th style={{ textAlign: 'right' }}>Likes 7d</th>
+                <th style={{ textAlign: 'left' }}>Health</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pStats.perAccount.map(({ account, snap }) => {
+                const hc = healthColor(account.health)
+                return (
+                  <tr key={account.id}>
+                    <td style={{ fontWeight: 600 }}>@{account.handle}</td>
+                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{account.account_type}</td>
+                    <td style={{ textAlign: 'right' }}>{snap ? formatNumber(snap.followers || 0) : '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{snap ? formatNumber(getSnapshotViews(snap)) : '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{snap ? formatNumber(snap.tt_likes_7d || snap.tw_likes_7d || 0) : '—'}</td>
+                    <td>
+                      <span style={{ padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
+                        {account.health}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
 
       {/* Trend Charts */}
       {trendData.length > 1 && (
