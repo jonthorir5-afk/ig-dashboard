@@ -289,6 +289,29 @@ export async function getPostsForAccounts(accountIds, days = 90) {
 // ============================================================
 // EXECUTIVE OVERVIEW QUERIES
 // ============================================================
+// ============================================================
+// ONLYFANS MAPPINGS
+// ============================================================
+export async function getLinkMappings() {
+  if (isDemoMode()) return []
+  const { data, error } = await supabase
+    .from('of_link_mappings')
+    .select('*')
+  if (error) throw error
+  return data
+}
+
+export async function saveLinkMapping(mapping) {
+  if (isDemoMode()) return mapping
+  const { data, error } = await supabase
+    .from('of_link_mappings')
+    .upsert(mapping, { onConflict: 'tracking_link_name' })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function getExecOverview() {
   if (isDemoMode()) {
     const since = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
@@ -300,23 +323,28 @@ export async function getExecOverview() {
         .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date)),
     }
   }
-  const [modelsRes, accountsRes, snapshotsRes] = await Promise.all([
+  const [modelsRes, accountsRes, snapshotsRes, ofTrackingRes] = await Promise.all([
     supabase.from('models').select('*').eq('status', 'Active'),
     supabase.from('accounts').select('*, model:models(id, name)'),
     supabase.from('snapshots')
       .select('*, account:accounts(id, platform, handle, health, model_id, model:models(id, name))')
       .gte('snapshot_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0])
       .order('snapshot_date', { ascending: false }),
+    supabase.from('of_tracking')
+      .select('model_id, subscribers, clicks, revenue_total, tracking_link_name, snapshot_date')
+      .order('snapshot_date', { ascending: false })
   ])
 
   if (modelsRes.error) throw modelsRes.error
   if (accountsRes.error) throw accountsRes.error
   if (snapshotsRes.error) throw snapshotsRes.error
+  if (ofTrackingRes.error) throw ofTrackingRes.error
 
   return {
     models: modelsRes.data,
     accounts: accountsRes.data,
     snapshots: snapshotsRes.data,
+    ofTracking: ofTrackingRes.data || [],
   }
 }
 
