@@ -28,7 +28,7 @@ export default async function handler(req) {
   }
 
   if (!accounts.length) {
-    return new Response(JSON.stringify({ message: 'No active TikTok accounts found', synced: 0 }))
+    return new Response(JSON.stringify({ synced: 0, errors: ['No active TikTok accounts found in database. Did you run supabase-add-rose-tiktok.sql?'], details: [] }))
   }
 
   const today = new Date().toISOString().split('T')[0]
@@ -38,6 +38,7 @@ export default async function handler(req) {
 
   // Build profiles list (strip leading @)
   const profiles = accounts.map(a => a.handle.replace('@', ''))
+  results._dbAccounts = accounts.map(a => a.handle)
 
   try {
     // Use clockworks/tiktok-scraper to get recent videos per profile
@@ -72,7 +73,21 @@ export default async function handler(req) {
           continue
         }
 
-        const videos = await runRes.json()
+        const responseText = await runRes.text()
+        let videos
+        try {
+          videos = JSON.parse(responseText)
+        } catch {
+          results.errors.push(`Non-JSON response from Apify: ${responseText.slice(0, 300)}`)
+          continue
+        }
+
+        if (!Array.isArray(videos)) {
+          results.errors.push(`Apify returned non-array: ${JSON.stringify(videos).slice(0, 300)}`)
+          continue
+        }
+
+        results._apifyVideoCount = (results._apifyVideoCount || 0) + videos.length
 
         // Debug: capture first video's structure to help diagnose field names
         if (videos.length > 0 && i === 0) {
