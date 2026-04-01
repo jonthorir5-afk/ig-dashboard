@@ -849,54 +849,121 @@ function NumField({ label, value, prev, onChange }) {
 
 function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
   const [text, setText] = useState(currentMapping?.tracking_link_name || '')
+  const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
     setText(currentMapping?.tracking_link_name || '')
   }, [currentMapping?.tracking_link_name])
 
+  const normalizedLinks = useMemo(() =>
+    ofLinks.map(link => {
+      const name = (link.campaignName || link.name || link.label || '').trim()
+      const url = (link.campaignUrl || link.url || link.link || '').trim()
+      const normalizedUrl = url.toLowerCase().replace(/\/$/, '')
+      const shortCode = normalizedUrl.match(/\/(c\d+)(?:$|[/?#])/i)?.[1]?.toLowerCase() || ''
+      const modelSlug = normalizedUrl.match(/onlyfans\.com\/([^/?#]+)/i)?.[1]?.toLowerCase() || ''
+
+      return {
+        ...link,
+        name,
+        url,
+        normalizedName: name.toLowerCase(),
+        normalizedUrl,
+        shortCode,
+        modelSlug,
+      }
+    }),
+  [ofLinks])
+
+  const filteredLinks = useMemo(() => {
+    const query = text.toLowerCase().trim().replace(/\/$/, '')
+    if (!query) return normalizedLinks.slice(0, 12)
+
+    return normalizedLinks
+      .filter(link =>
+        link.normalizedName.includes(query) ||
+        link.normalizedUrl.includes(query) ||
+        link.shortCode.includes(query) ||
+        link.modelSlug.includes(query)
+      )
+      .slice(0, 12)
+  }, [normalizedLinks, text])
+
+  const selectLink = (link) => {
+    setText(link.name || link.url)
+    setIsOpen(false)
+    onSave(link.name || link.url, link)
+  }
+
   const handleChange = (e) => {
     const val = e.target.value
     setText(val)
+    setIsOpen(true)
 
     const cleanVal = val.toLowerCase().trim().replace(/\/$/, '')
 
-    const linkDetails = ofLinks.find(l => {
-      const lName = (l.campaignName || l.name || l.label || '').toLowerCase().trim()
-      const lUrl = (l.campaignUrl || l.url || l.link || '').toLowerCase().trim().replace(/\/$/, '')
+    const linkDetails = normalizedLinks.find(link => (
+      link.normalizedName === cleanVal ||
+      link.normalizedUrl === cleanVal ||
+      (!!link.shortCode && link.shortCode === cleanVal)
+    ))
 
-      return lName === cleanVal || lUrl === cleanVal || (cleanVal.includes('onlyfans.com') && lUrl.includes(cleanVal))
-    })
-
-    if (linkDetails) {
-      const lName = linkDetails.campaignName || linkDetails.name || linkDetails.label
-      setText(lName)
-      onSave(lName, linkDetails)
+    if (linkDetails && cleanVal) {
+      selectLink(linkDetails)
     } else if (val.includes('onlyfans.com') && val.length > 25) {
       console.warn('URL pasted but NOT FOUND natively in the API downloaded tracking links: ', val)
     }
   }
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
       <input
-        list={`ofLinksList-${acc.id}`}
         value={text}
         onChange={handleChange}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => {
+          window.setTimeout(() => setIsOpen(false), 150)
+        }}
         placeholder="Search & select tracking link..."
         style={inputStyle}
       />
-      <datalist id={`ofLinksList-${acc.id}`}>
-        {ofLinks.map((l, i) => {
-          const lName = l.campaignName || l.name || l.label || ''
-          const lUrl = l.campaignUrl || l.url || l.link || ''
-          return (
-            <option key={i} value={lName}>
-              {lUrl}
-            </option>
-          )
-        })}
-      </datalist>
-    </>
+      {isOpen && filteredLinks.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 6px)',
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          maxHeight: '260px',
+          overflowY: 'auto',
+          borderRadius: '10px',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary)',
+          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.25)',
+        }}>
+          {filteredLinks.map((link, i) => (
+            <button
+              key={`${link.name}-${link.url}-${i}`}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => selectLink(link)}
+              style={{
+                width: '100%',
+                padding: '0.75rem 0.9rem',
+                border: 'none',
+                borderBottom: i === filteredLinks.length - 1 ? 'none' : '1px solid var(--border-color)',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{link.name || 'Unnamed link'}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{link.url}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
-
