@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.of_tracking (
     revenue_per_subscriber numeric DEFAULT 0,
     revenue_per_click numeric DEFAULT 0,
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-    UNIQUE(model_id, tracking_link_name, snapshot_date)
+    UNIQUE(account_id, snapshot_date)
 );
 
 -- Enable RLS

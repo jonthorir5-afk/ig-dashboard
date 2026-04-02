@@ -293,7 +293,7 @@ export default async function handler(req) {
           revenue_total: matchedLink.revenue,
           revenue_per_subscriber: matchedLink.subscribers > 0 ? matchedLink.revenue / matchedLink.subscribers : 0,
           revenue_per_click: matchedLink.clicks > 0 ? matchedLink.revenue / matchedLink.clicks : 0,
-        }, { onConflict: 'model_id,tracking_link_name,snapshot_date' })
+        }, { onConflict: 'account_id,snapshot_date' })
     }
 
     return json({
