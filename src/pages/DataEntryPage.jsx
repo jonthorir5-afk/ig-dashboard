@@ -274,59 +274,65 @@ export default function DataEntryPage() {
           .map(account => account.handle)
 
         const aggregated = { synced: 0, skipped: 0, errors: [], details: [] }
-        const startRes = await fetch('/.netlify/functions/sync-instagram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'start', handles: instagramAccounts }),
-        })
-        const startText = await startRes.text()
-        let startData
-        try { startData = JSON.parse(startText) } catch { throw new Error(`Non-JSON response (${startRes.status}): ${startText.slice(0, 500)}`) }
-        if (!startRes.ok) throw new Error(startData.error || `Sync failed (${startRes.status})`)
+        const batchSize = 2
 
-        let runStatus = startData.status
-        let datasetId = startData.datasetId
-        const runId = startData.runId
+        for (let i = 0; i < instagramAccounts.length; i += batchSize) {
+          const handles = instagramAccounts.slice(i, i + batchSize)
 
-        for (let attempt = 0; attempt < 30; attempt++) {
-          if (runStatus === 'SUCCEEDED' || runStatus === 'SUCCEEDED_WITH_ERRORS') break
-          if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
-            throw new Error(`Instagram scrape ${runStatus.toLowerCase()}`)
-          }
-
-          await new Promise(resolve => window.setTimeout(resolve, 3000))
-
-          const statusRes = await fetch('/.netlify/functions/sync-instagram', {
+          const startRes = await fetch('/.netlify/functions/sync-instagram', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'status', runId }),
+            body: JSON.stringify({ action: 'start', handles }),
           })
-          const statusText = await statusRes.text()
-          let statusData
-          try { statusData = JSON.parse(statusText) } catch { throw new Error(`Non-JSON response (${statusRes.status}): ${statusText.slice(0, 500)}`) }
-          if (!statusRes.ok) throw new Error(statusData.error || `Sync failed (${statusRes.status})`)
-          runStatus = statusData.status
-          datasetId = statusData.datasetId || datasetId
+          const startText = await startRes.text()
+          let startData
+          try { startData = JSON.parse(startText) } catch { throw new Error(`Non-JSON response (${startRes.status}): ${startText.slice(0, 500)}`) }
+          if (!startRes.ok) throw new Error(startData.error || `Sync failed (${startRes.status})`)
+
+          let runStatus = startData.status
+          let datasetId = startData.datasetId
+          const runId = startData.runId
+
+          for (let attempt = 0; attempt < 40; attempt++) {
+            if (runStatus === 'SUCCEEDED' || runStatus === 'SUCCEEDED_WITH_ERRORS') break
+            if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
+              throw new Error(`Instagram scrape ${runStatus.toLowerCase()} for ${handles.join(', ')}`)
+            }
+
+            await new Promise(resolve => window.setTimeout(resolve, 2500))
+
+            const statusRes = await fetch('/.netlify/functions/sync-instagram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'status', runId }),
+            })
+            const statusText = await statusRes.text()
+            let statusData
+            try { statusData = JSON.parse(statusText) } catch { throw new Error(`Non-JSON response (${statusRes.status}): ${statusText.slice(0, 500)}`) }
+            if (!statusRes.ok) throw new Error(statusData.error || `Sync failed (${statusRes.status})`)
+            runStatus = statusData.status
+            datasetId = statusData.datasetId || datasetId
+          }
+
+          if (runStatus !== 'SUCCEEDED' && runStatus !== 'SUCCEEDED_WITH_ERRORS') {
+            throw new Error(`Instagram scrape timed out before completion for ${handles.join(', ')}`)
+          }
+
+          const importRes = await fetch('/.netlify/functions/sync-instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'import', datasetId, handles }),
+          })
+          const importText = await importRes.text()
+          let importData
+          try { importData = JSON.parse(importText) } catch { throw new Error(`Non-JSON response (${importRes.status}): ${importText.slice(0, 500)}`) }
+          if (!importRes.ok) throw new Error(importData.error || `Sync failed (${importRes.status})`)
+
+          aggregated.synced += importData.synced || 0
+          aggregated.skipped += importData.skipped || 0
+          if (importData.errors?.length) aggregated.errors.push(...importData.errors)
+          if (importData.details?.length) aggregated.details.push(...importData.details)
         }
-
-        if (runStatus !== 'SUCCEEDED' && runStatus !== 'SUCCEEDED_WITH_ERRORS') {
-          throw new Error('Instagram scrape timed out before completion')
-        }
-
-        const importRes = await fetch('/.netlify/functions/sync-instagram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'import', datasetId, handles: instagramAccounts }),
-        })
-        const importText = await importRes.text()
-        let importData
-        try { importData = JSON.parse(importText) } catch { throw new Error(`Non-JSON response (${importRes.status}): ${importText.slice(0, 500)}`) }
-        if (!importRes.ok) throw new Error(importData.error || `Sync failed (${importRes.status})`)
-
-        aggregated.synced += importData.synced || 0
-        aggregated.skipped += importData.skipped || 0
-        if (importData.errors?.length) aggregated.errors.push(...importData.errors)
-        if (importData.details?.length) aggregated.details.push(...importData.details)
 
         if (!silent) setSyncResults(aggregated)
         logAudit({
