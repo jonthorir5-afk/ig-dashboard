@@ -210,36 +210,17 @@ async function importItems(accounts, items) {
       return Math.max(max, value)
     }, 0)
 
-    let followers = firstNumber(
-      item.followersCount,
-      item.followers,
-      item.followers_count,
-      item.edge_followed_by?.count,
-      item.owner?.followersCount,
-      item.profile?.followersCount
-    )
-    let following = firstNumber(
-      item.followsCount,
-      item.followingCount,
-      item.following,
-      item.following_count,
-      item.edge_follow?.count,
-      item.owner?.followingCount,
-      item.profile?.followingCount
-    )
-    let followerSource = followers != null ? 'profile-scraper' : 'missing'
+    let followers = null
+    let following = null
+    let followerSource = 'missing'
 
-    if (followers == null) {
-      try {
-        const fallback = await fetchFollowersFallback(username)
-        if (fallback.followers != null) {
-          followers = fallback.followers
-          if (following == null) following = fallback.following
-          followerSource = 'followers-scraper'
-        }
-      } catch (fallbackErr) {
-        results.errors.push(`@${username}: followers fallback failed — ${fallbackErr.message}`)
-      }
+    try {
+      const followerData = await fetchFollowersFallback(username)
+      followers = followerData.followers
+      following = followerData.following
+      if (followers != null) followerSource = 'followers-scraper'
+    } catch (fallbackErr) {
+      results.errors.push(`@${username}: followers lookup failed — ${fallbackErr.message}`)
     }
 
     const vtfrValues = posts7d
