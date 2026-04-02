@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
@@ -19,6 +19,7 @@ export default function PlatformPage() {
   const [sortKey, setSortKey] = useState('followers')
   const [sortDir, setSortDir] = useState('desc')
   const [selectedPlatform, setSelectedPlatform] = useState(platform || '')
+  const [selectedModelIds, setSelectedModelIds] = useState([])
 
   useEffect(() => {
     setSelectedPlatform(platform || '')
@@ -51,6 +52,7 @@ export default function PlatformPage() {
       _ofCvr: (ofByAccount[a.id]?.clicks || 0) > 0 ? ((ofByAccount[a.id]?.subscribers || 0) / ofByAccount[a.id].clicks) * 100 : 0,
     }))
     if (selectedPlatform) result = result.filter(a => a.platform === selectedPlatform)
+    if (selectedModelIds.length > 0) result = result.filter(a => selectedModelIds.includes(a.model_id))
     if (search) result = result.filter(a => a.handle.toLowerCase().includes(search.toLowerCase()) || a.model?.name?.toLowerCase().includes(search.toLowerCase()))
     result.sort((a, b) => {
       const aVal = a[`_${sortKey}`] ?? a[sortKey] ?? 0
@@ -58,7 +60,7 @@ export default function PlatformPage() {
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
     return result
-  }, [accounts, snapshots, ofTracking, selectedPlatform, search, sortKey, sortDir])
+  }, [accounts, snapshots, ofTracking, selectedPlatform, selectedModelIds, search, sortKey, sortDir])
 
   const requestSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
@@ -66,6 +68,23 @@ export default function PlatformPage() {
   }
 
   const SortIcon = ({ k }) => sortKey === k ? (sortDir === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />) : null
+
+  const modelOptions = useMemo(() => {
+    const map = new Map()
+    for (const account of accounts) {
+      if (selectedPlatform && account.platform !== selectedPlatform) continue
+      if (account.model_id && account.model?.name) map.set(account.model_id, account.model.name)
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [accounts, selectedPlatform])
+
+  const toggleModel = (modelId) => {
+    setSelectedModelIds(prev =>
+      prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
+    )
+  }
 
   // Sparkline data per account from history
   const sparklines = useMemo(() => {
@@ -108,7 +127,7 @@ export default function PlatformPage() {
             handle: a.handle, model: a.model?.name, platform: a.platform,
             health: a.health, followers: a._followers, views_7d: a._views,
             clicks_7d: a._clicks, vtfr: a._vtfr, er: a._er, of_link: a.ofTracking?.tracking_link_name || '',
-            of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1)
+            of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1), of_revenue: a._ofRevenue
           }))
           exportToCSV(rows, `${selectedPlatform || 'all-platforms'}.csv`)
         }}>
@@ -116,20 +135,40 @@ export default function PlatformPage() {
         </button>
       </div>
 
-      {/* Platform tabs */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <Link to="/platforms" className={`btn ${!selectedPlatform ? 'btn-primary' : 'btn-secondary'}`} style={{ borderRadius: '20px', padding: '6px 16px' }}>All</Link>
-        {Object.entries(PLATFORM_LABELS).map(([key, label]) => (
-          <Link key={key} to={`/platforms/${key}`} className={`btn ${selectedPlatform === key ? 'btn-primary' : 'btn-secondary'}`} style={{ borderRadius: '20px', padding: '6px 16px' }}>
-            {label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="search-bar" style={{ maxWidth: '400px' }}>
-        <Search size={18} className="search-icon" />
-        <input type="text" placeholder="Search by handle or model..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="search-bar" style={{ maxWidth: '400px' }}>
+          <Search size={18} className="search-icon" />
+          <input type="text" placeholder="Search by handle or model..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="glass-panel" style={{ padding: '0.75rem 1rem', minWidth: '260px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Models</span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+              onClick={() => setSelectedModelIds([])}
+            >
+              All Models
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+            {modelOptions.map(model => {
+              const active = selectedModelIds.includes(model.id)
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => toggleModel(model.id)}
+                  className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ padding: '0.35rem 0.7rem', fontSize: '0.75rem', borderRadius: '999px' }}
+                >
+                  {model.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Trend Chart */}
@@ -159,7 +198,6 @@ export default function PlatformPage() {
                 <th>Handle</th>
                 <th>Model</th>
                 {!selectedPlatform && <th>Platform</th>}
-                <th>Type</th>
                 <th>Health</th>
                 <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>
                 <th style={{ textAlign: 'center' }}>Trend</th>
@@ -169,6 +207,7 @@ export default function PlatformPage() {
                 <th className="sortable numeric" onClick={() => requestSort('ofClicks')}>OF Clicks <SortIcon k="ofClicks" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs <SortIcon k="ofSubs" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('ofCvr')}>CVR <SortIcon k="ofCvr" /></th>
+                <th className="sortable numeric" onClick={() => requestSort('ofRevenue')}>Revenue <SortIcon k="ofRevenue" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('er')}>ER <SortIcon k="er" /></th>
               </tr>
@@ -182,7 +221,6 @@ export default function PlatformPage() {
                     <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
                     <td>{a.model?.name || '—'}</td>
                     {!selectedPlatform && <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>}
-                    <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{a.account_type || '—'}</td>
                     <td>
                       <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
                         {a.health}
@@ -196,13 +234,21 @@ export default function PlatformPage() {
                     <td className="numeric">{formatNumber(a._ofClicks)}</td>
                     <td className="numeric font-semibold">{formatNumber(a._ofSubs)}</td>
                     <td className="numeric">{a._ofClicks ? `${a._ofCvr.toFixed(1)}%` : '—'}</td>
+                    <td className="numeric">{a._ofRevenue ? `$${formatNumber(a._ofRevenue)}` : '—'}</td>
                     <td className="numeric">{a._vtfr ? a._vtfr.toFixed(1) + '%' : '—'}</td>
                     <td className="numeric">{a._er ? a._er.toFixed(1) + '%' : '—'}</td>
                   </tr>
                 )
               })}
               {merged.length === 0 && (
-                <tr><td colSpan={15} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts found.</td></tr>
+                <tr>
+                  <td
+                    colSpan={selectedPlatform ? 15 : 16}
+                    style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}
+                  >
+                    No accounts found.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
