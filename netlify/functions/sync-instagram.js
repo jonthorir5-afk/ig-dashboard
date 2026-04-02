@@ -6,7 +6,7 @@ const supabase = createClient(
 )
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN
-const APIFY_FOLLOWERS_SCRAPER = 'apify~instagram-followers-count-scraper'
+const APIFY_INSTAGRAM_SCRAPER = 'apify~instagram-profile-scraper'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -102,12 +102,19 @@ async function getInstagramAccounts(handles = []) {
 }
 
 async function startRun(usernames) {
+  const directUrls = usernames.map(username => `https://www.instagram.com/${username}/`)
   const data = await apifyFetchJson(
-    `https://api.apify.com/v2/acts/${APIFY_FOLLOWERS_SCRAPER}/runs?token=${APIFY_TOKEN}`,
+    `https://api.apify.com/v2/acts/${APIFY_INSTAGRAM_SCRAPER}/runs?token=${APIFY_TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usernames }),
+      body: JSON.stringify({
+        usernames,
+        directUrls,
+        resultsType: 'details',
+        resultsLimit: Math.max(usernames.length, 1),
+        searchType: 'user',
+      }),
     },
     15000
   )
@@ -137,15 +144,22 @@ async function importItems(accounts, items) {
 
   for (const item of items) {
     const username = normalizeHandle(item.username || item.userName || item.ownerUsername || item.user || item.handle)
-    if (!username) continue
+    const fallbackHandle = accounts.length === 1 ? normalizeHandle(accounts[0].handle) : ''
+    const resolvedHandle = username || fallbackHandle
+    if (!resolvedHandle) continue
 
-    const account = accounts.find(acc => normalizeHandle(acc.handle) === username)
+    const account = accounts.find(acc => normalizeHandle(acc.handle) === resolvedHandle)
     if (!account) continue
 
     let followers = firstNumber(
       item.followersCount,
+      item.followers_count,
       item.follower_count,
       item.followers,
+      item.followersText,
+      item.followers_text,
+      item.owner?.followersCount,
+      item.owner?.followers,
       item.number_of_members,
       item.edge_followed_by?.count
     )
@@ -153,7 +167,12 @@ async function importItems(accounts, items) {
       item.followsCount,
       item.followingCount,
       item.following_count,
+      item.following_count,
       item.following,
+      item.followingText,
+      item.following_text,
+      item.owner?.followsCount,
+      item.owner?.following,
       item.edge_follow?.count
     )
     const followerSource = followers != null ? 'followers-scraper' : 'missing'
@@ -170,7 +189,7 @@ async function importItems(accounts, items) {
       vtfr_weekly: null,
       engagement_rate_weekly: null,
       captured_by: 'API-Instagram',
-      notes: `Auto-synced via Apify Instagram followers count scraper. Followers source: ${followerSource}.`,
+      notes: `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`,
     }
 
     const { data: existing } = await supabase
@@ -198,11 +217,11 @@ async function importItems(accounts, items) {
 
       const { error } = await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
       if (error) {
-        results.errors.push(`@${username}: update failed — ${error.message}`)
+        results.errors.push(`@${resolvedHandle}: update failed — ${error.message}`)
       } else {
         results.synced++
         results.details.push({
-          handle: username,
+          handle: resolvedHandle,
           action: 'updated',
           followers: snapshot.followers,
           views_7d: null,
@@ -216,13 +235,13 @@ async function importItems(accounts, items) {
 
       const { error } = await supabase.from('snapshots').insert(snapshot)
       if (error) {
-        results.errors.push(`@${username}: insert failed — ${error.message}`)
+        results.errors.push(`@${resolvedHandle}: insert failed — ${error.message}`)
       } else {
         results.synced++
         results.details.push({
-          handle: username,
+          handle: resolvedHandle,
           action: 'created',
-          followers,
+          followers: snapshot.followers,
           views_7d: null,
           warning: followers == null ? 'followers unavailable from scraper' : undefined,
           follower_source: followerSource,
