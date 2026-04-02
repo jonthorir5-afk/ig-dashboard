@@ -327,6 +327,22 @@ async function importItems(accounts, items) {
     if (!syncedHandles.has(handle)) {
       results.skipped++
       results.errors.push(`@${handle}: not found in Instagram scraper results`)
+      results._debug[handle] = {
+        missingFromDataset: true,
+        attemptedHandle: handle,
+        datasetItemsCount: items.length,
+        datasetHandles: items
+          .map(item => normalizeHandle(
+            item.username ||
+            item.userName ||
+            item.ownerUsername ||
+            item.user ||
+            item.handle ||
+            handleFromUrl(item.url || item.profileUrl || item.inputUrl)
+          ))
+          .filter(Boolean)
+          .slice(0, 20),
+      }
     }
   }
 

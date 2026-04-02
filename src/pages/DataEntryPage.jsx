@@ -325,7 +325,7 @@ export default function DataEntryPage() {
     if (!pendingRuns.length) return
 
     const nextPending = []
-    const progress = { synced: 0, skipped: 0, errors: [], details: [], pending: 0 }
+    const progress = { synced: 0, skipped: 0, errors: [], details: [], pending: 0, _debug: {} }
 
     for (const run of pendingRuns) {
       try {
@@ -357,6 +357,7 @@ export default function DataEntryPage() {
           progress.skipped += importData.skipped || 0
           if (importData.errors?.length) progress.errors.push(...importData.errors)
           if (importData.details?.length) progress.details.push(...importData.details)
+          if (importData._debug) Object.assign(progress._debug, importData._debug)
         } else if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
           progress.errors.push(`Instagram scrape ${runStatus.toLowerCase()} for ${run.handles.join(', ')}`)
         } else {
@@ -385,6 +386,7 @@ export default function DataEntryPage() {
           errors: dedupeStrings([...(base.errors || []), ...progress.errors]),
           details: dedupeSyncDetails([...(base.details || []), ...progress.details]),
           pending: progress.pending,
+          _debug: { ...(base._debug || {}), ...(progress._debug || {}) },
           source: 'instagram-background',
         }
       })
