@@ -62,7 +62,22 @@ function parseCompactNumber(value) {
 
   const match = normalized.match(/^(-?\d+(?:\.\d+)?)([kmb])?$/i)
   if (!match) {
-    const parsed = Number(normalized)
+    const embedded = normalized.replace(/\s+/g, '').match(/(-?\d+(?:\.\d+)?)([kmb])?/i)
+    if (embedded) {
+      const base = Number(embedded[1])
+      if (!Number.isFinite(base)) return null
+
+      const suffix = (embedded[2] || '').toLowerCase()
+      const multiplier =
+        suffix === 'k' ? 1_000 :
+        suffix === 'm' ? 1_000_000 :
+        suffix === 'b' ? 1_000_000_000 :
+        1
+
+      return Math.round(base * multiplier)
+    }
+
+    const parsed = Number(normalized.replace(/[^\d.-]/g, ''))
     return Number.isFinite(parsed) ? parsed : null
   }
 
@@ -90,6 +105,11 @@ function firstNumber(...values) {
 
 function getFollowerDebugFields(item) {
   return {
+    status: item.status ?? null,
+    error: item.error ?? null,
+    message: item.message ?? null,
+    inputUrl: item.inputUrl ?? null,
+    url: item.url ?? item.profileUrl ?? null,
     followersCount: item.followersCount ?? null,
     followers_count: item.followers_count ?? null,
     follower_count: item.follower_count ?? null,
@@ -100,6 +120,17 @@ function getFollowerDebugFields(item) {
     ownerFollowers: item.owner?.followers ?? null,
     edgeFollowedBy: item.edge_followed_by?.count ?? null,
     keys: Object.keys(item || {}).slice(0, 30),
+  }
+}
+
+function handleFromUrl(url) {
+  if (!url) return ''
+  try {
+    const pathname = new URL(url).pathname.split('/').filter(Boolean)
+    return normalizeHandle(pathname[0] || '')
+  } catch {
+    const match = String(url).match(/instagram\.com\/([^/?#]+)/i)
+    return normalizeHandle(match?.[1] || '')
   }
 }
 
@@ -117,7 +148,6 @@ async function getInstagramAccounts(handles = []) {
 }
 
 async function startRun(usernames) {
-  const directUrls = usernames.map(username => `https://www.instagram.com/${username}/`)
   const data = await apifyFetchJson(
     `https://api.apify.com/v2/acts/${APIFY_INSTAGRAM_SCRAPER}/runs?token=${APIFY_TOKEN}`,
     {
@@ -125,10 +155,8 @@ async function startRun(usernames) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         usernames,
-        directUrls,
         resultsType: 'details',
-        resultsLimit: Math.max(usernames.length, 1),
-        searchType: 'user',
+        maxPosts: 0,
       }),
     },
     15000
@@ -158,7 +186,14 @@ async function importItems(accounts, items) {
   const results = { synced: 0, skipped: 0, errors: [], details: [], _debug: {} }
 
   for (const item of items) {
-    const username = normalizeHandle(item.username || item.userName || item.ownerUsername || item.user || item.handle)
+    const username = normalizeHandle(
+      item.username ||
+      item.userName ||
+      item.ownerUsername ||
+      item.user ||
+      item.handle ||
+      handleFromUrl(item.url || item.profileUrl || item.inputUrl)
+    )
     const fallbackHandle = accounts.length === 1 ? normalizeHandle(accounts[0].handle) : ''
     const resolvedHandle = username || fallbackHandle
     if (!resolvedHandle) continue
