@@ -7,6 +7,7 @@ const supabase = createClient(
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN
 const APIFY_PROFILE_SCRAPER = 'apify~instagram-profile-scraper'
+const APIFY_FOLLOWERS_SCRAPER = 'apify~instagram-followers-count-scraper'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -128,6 +129,41 @@ async function getDatasetItems(datasetId) {
   return res.json()
 }
 
+async function fetchFollowersFallback(username) {
+  const res = await fetch(
+    `https://api.apify.com/v2/acts/${APIFY_FOLLOWERS_SCRAPER}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames: [username] }),
+    }
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Apify followers fallback ${res.status}: ${text.slice(0, 300)}`)
+  }
+
+  const items = await res.json()
+  const item = Array.isArray(items) ? items[0] : null
+  if (!item) return { followers: null, following: null }
+
+  return {
+    followers: firstNumber(
+      item.followersCount,
+      item.follower_count,
+      item.followers,
+      item.number_of_members
+    ),
+    following: firstNumber(
+      item.followsCount,
+      item.followingCount,
+      item.following_count,
+      item.following
+    ),
+  }
+}
+
 async function importItems(accounts, items) {
   const today = new Date().toISOString().split('T')[0]
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
@@ -162,7 +198,7 @@ async function importItems(accounts, items) {
       return Math.max(max, value)
     }, 0)
 
-    const followers = firstNumber(
+    let followers = firstNumber(
       item.followersCount,
       item.followers,
       item.followers_count,
@@ -170,7 +206,7 @@ async function importItems(accounts, items) {
       item.owner?.followersCount,
       item.profile?.followersCount
     )
-    const following = firstNumber(
+    let following = firstNumber(
       item.followsCount,
       item.followingCount,
       item.following,
@@ -179,6 +215,20 @@ async function importItems(accounts, items) {
       item.owner?.followingCount,
       item.profile?.followingCount
     )
+    let followerSource = followers != null ? 'profile-scraper' : 'missing'
+
+    if (followers == null) {
+      try {
+        const fallback = await fetchFollowersFallback(username)
+        if (fallback.followers != null) {
+          followers = fallback.followers
+          if (following == null) following = fallback.following
+          followerSource = 'followers-scraper'
+        }
+      } catch (fallbackErr) {
+        results.errors.push(`@${username}: followers fallback failed — ${fallbackErr.message}`)
+      }
+    }
 
     const vtfrValues = posts7d
       .map(post => {
@@ -210,7 +260,7 @@ async function importItems(accounts, items) {
       vtfr_weekly: vtfrValues.length ? average(vtfrValues) : null,
       engagement_rate_weekly: erValues.length ? average(erValues) : null,
       captured_by: 'API-Instagram',
-      notes: `Auto-synced via Apify public Instagram profile data. Followers source: ${followers != null ? 'resolved' : 'missing'}.`,
+      notes: `Auto-synced via Apify public Instagram profile data. Followers source: ${followerSource}.`,
     }
 
     const { data: existing } = await supabase
@@ -247,6 +297,7 @@ async function importItems(accounts, items) {
           followers: snapshot.followers,
           views_7d: views7d,
           warning: followers == null ? 'followers unavailable from scraper' : undefined,
+          follower_source: followerSource,
         })
       }
     } else {
@@ -264,6 +315,7 @@ async function importItems(accounts, items) {
           followers,
           views_7d: views7d,
           warning: followers == null ? 'followers unavailable from scraper' : undefined,
+          follower_source: followerSource,
         })
       }
     }
