@@ -31,7 +31,9 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='ariana'), 'twitter', 'TSAriiAngels',    'Farm',    'Active', 'Clean'),
   ((select id from models where name='ariana'), 'twitter', 'TSAngelArii',     'Farm',    'Active', 'Clean'),
   ((select id from models where name='ariana'), 'twitter', 'AriAngelsXo',     'Farm',    'Active', 'Limited'),
-  ((select id from models where name='ariana'), 'twitter', 'Isabelacasiu',    'Farm',    'Active', 'Clean');
+  ((select id from models where name='ariana'), 'twitter', 'Isabelacasiu',    'Farm',    'Active', 'Clean'),
+  ((select id from models where name='ariana'), 'instagram', 'arianaangelsxo', 'Primary', 'Active', 'Clean'),
+  ((select id from models where name='ariana'), 'instagram', 'ariangelsxx',    'Farm',    'Active', 'Clean');
 
 -- ROSE — 3 X accounts + 1 Reddit + 4 TikTok
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
@@ -42,7 +44,9 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='rose'), 'tiktok',  'porcelain.ts.girl',   'Primary', 'Active', 'Clean'),
   ((select id from models where name='rose'), 'tiktok',  'ts.porcelain.bby',    'Farm',    'Active', 'Clean'),
   ((select id from models where name='rose'), 'tiktok',  'tsporcelain',         'Farm',    'Active', 'Clean'),
-  ((select id from models where name='rose'), 'tiktok',  'rose.ts3',            'Farm',    'Active', 'Clean');
+  ((select id from models where name='rose'), 'tiktok',  'rose.ts3',            'Farm',    'Active', 'Clean'),
+  ((select id from models where name='rose'), 'instagram', 'tsporcelainx',      'Primary', 'Active', 'Clean'),
+  ((select id from models where name='rose'), 'instagram', 'tsroseporcelain',   'Farm',    'Active', 'Clean');
 
 -- INDIBABY — 5 X accounts
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
@@ -65,7 +69,8 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='franche'), 'twitter', 'Tsfrancheexo',    'Farm',    'Active', 'Clean'),
   ((select id from models where name='franche'), 'twitter', 'franchetgirl',    'Farm',    'Active', 'Clean'),
   ((select id from models where name='franche'), 'twitter', 'Tsfranchecutie',  'Farm',    'Active', 'Clean'),
-  ((select id from models where name='franche'), 'twitter', 'franchebbyx',     'Farm',    'Active', 'Limited');
+  ((select id from models where name='franche'), 'twitter', 'franchebbyx',     'Farm',    'Active', 'Limited'),
+  ((select id from models where name='franche'), 'instagram', 'itzchessyxo',   'Primary', 'Active', 'Clean');
 
 -- MOXIE — 5 X accounts + 1 Reddit
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
@@ -74,7 +79,8 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='moxie'), 'twitter', 'TsMoxiebby',    'Farm',    'Active', 'Clean'),
   ((select id from models where name='moxie'), 'twitter', 'isabelaramir3', 'Farm',    'Active', 'Clean'),
   ((select id from models where name='moxie'), 'twitter', 'moxiedollts',   'Farm',    'Active', 'Clean'),
-  ((select id from models where name='moxie'), 'reddit',  'u/Moxied0ll',   'Primary', 'Active', 'Clean');
+  ((select id from models where name='moxie'), 'reddit',  'u/Moxied0ll',   'Primary', 'Active', 'Clean'),
+  ((select id from models where name='moxie'), 'instagram', 'ts.moxie',    'Primary', 'Active', 'Clean');
 
 -- LOLA — 3 X accounts + 1 Reddit
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
@@ -106,7 +112,8 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
   ((select id from models where name='angelmoon'), 'twitter', 'SinnyRose',     'Primary', 'Active', 'Clean'),
   ((select id from models where name='angelmoon'), 'twitter', 'TsAngelMoon',   'Farm',    'Active', 'Clean'),
-  ((select id from models where name='angelmoon'), 'twitter', 'cutieTsangel',  'Farm',    'Active', 'Clean');
+  ((select id from models where name='angelmoon'), 'twitter', 'cutieTsangel',  'Farm',    'Active', 'Clean'),
+  ((select id from models where name='angelmoon'), 'instagram', 'itssinxo',    'Primary', 'Active', 'Clean');
 
 -- DAWN — 2 X accounts
 insert into public.accounts (model_id, platform, handle, account_type, status, health) values
@@ -119,5 +126,5 @@ insert into public.accounts (model_id, platform, handle, account_type, status, h
   ((select id from models where name='gia'), 'twitter', 'tsbbygf',    'Farm',    'Active', 'Clean');
 
 -- ============================================================
--- Done! 13 models + 52 accounts (48 Twitter + 4 Reddit) seeded.
+-- Done! 13 models + 60 accounts seeded.
 -- ============================================================
