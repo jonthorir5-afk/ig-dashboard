@@ -151,10 +151,26 @@ export default async function handler(req) {
 
     if (modelsErr) throw modelsErr
 
+    const { data: accountOverrides, error: accountOverridesErr } = await supabase
+      .from('accounts')
+      .select('of_username_override')
+      .not('of_username_override', 'is', null)
+
     const results = { action, synced: 0, errors: [], details: [] }
     const today = new Date().toISOString().split('T')[0]
 
-    const modelUsernames = new Set(models.map(model => normalizeUsername(model.of_username)).filter(Boolean))
+    if (accountOverridesErr && !String(accountOverridesErr.message || '').includes('of_username_override')) {
+      throw accountOverridesErr
+    }
+
+    const accountOverrideUsernames = (accountOverrides || [])
+      .map(account => normalizeUsername(account.of_username_override))
+      .filter(Boolean)
+
+    const modelUsernames = new Set([
+      ...models.map(model => normalizeUsername(model.of_username)).filter(Boolean),
+      ...accountOverrideUsernames,
+    ])
     const relevantAccounts = ofAccounts.filter(account => {
       const usernames = [
         normalizeUsername(account.onlyfans_username || account.username),
