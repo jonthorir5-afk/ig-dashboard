@@ -263,9 +263,10 @@ export default function DataEntryPage() {
     }
   }
 
-  const handleApiSync = async (platform) => {
+  const handleApiSync = async (platform, options = {}) => {
+    const { silent = false } = options
     setSyncing(true)
-    setSyncResults(null)
+    if (!silent) setSyncResults(null)
     try {
       const fetchOpts = { method: 'POST' }
       if (platform === 'onlyfans') {
@@ -277,7 +278,7 @@ export default function DataEntryPage() {
       let data
       try { data = JSON.parse(text) } catch { throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 500)}`) }
       if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`)
-      setSyncResults(data)
+      if (!silent) setSyncResults(data)
       logAudit({
         action: 'api_sync',
         entity_type: 'platform',
@@ -285,8 +286,10 @@ export default function DataEntryPage() {
         details: `API sync: ${data.synced} accounts updated, ${data.errors?.length || 0} errors`,
         user_id: user?.id,
       })
+      return data
     } catch (err) {
-      setSyncResults({ synced: 0, errors: [err.message] })
+      if (!silent) setSyncResults({ synced: 0, errors: [err.message] })
+      throw err
     } finally {
       setSyncing(false)
     }
@@ -405,6 +408,12 @@ export default function DataEntryPage() {
                               const filtered = prev.filter(m => m.account_id !== acc.id)
                               return [...filtered, saved]
                             })
+                            try {
+                              const syncData = await handleApiSync('onlyfans', { silent: true })
+                              setSyncResults(syncData)
+                            } catch (syncErr) {
+                              setSyncResults({ synced: 0, errors: [`Mapping saved, but OnlyFans sync failed: ${syncErr.message}`] })
+                            }
                           } catch (err) {
                             alert("Error saving: " + err.message)
                           }
