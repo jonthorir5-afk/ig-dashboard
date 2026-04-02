@@ -7,6 +7,7 @@ const supabase = createClient(
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN
 const APIFY_PROFILE_SCRAPER = 'apify~instagram-profile-scraper'
+const BATCH_SIZE = 2
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -34,6 +35,32 @@ function getRecentPosts(item) {
   return item.latestPosts || item.latest_posts || item.posts || item.recentPosts || []
 }
 
+async function fetchInstagramBatch(usernames) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 45000)
+
+  try {
+    const runRes = await fetch(
+      `https://api.apify.com/v2/acts/${APIFY_PROFILE_SCRAPER}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ usernames }),
+      }
+    )
+
+    if (!runRes.ok) {
+      const errText = await runRes.text()
+      throw new Error(`Apify error ${runRes.status}: ${errText.slice(0, 300)}`)
+    }
+
+    return await runRes.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
   if (!APIFY_TOKEN) return json({ error: 'APIFY_TOKEN not configured' }, 500)
@@ -55,23 +82,12 @@ export default async function handler(req) {
   const usernames = accounts.map(account => normalizeHandle(account.handle)).filter(Boolean)
 
   try {
-    const runRes = await fetch(
-      `https://api.apify.com/v2/acts/${APIFY_PROFILE_SCRAPER}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usernames,
-        }),
-      }
-    )
-
-    if (!runRes.ok) {
-      const errText = await runRes.text()
-      return json({ synced: 0, errors: [`Apify error ${runRes.status}: ${errText.slice(0, 500)}`] })
+    const items = []
+    for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
+      const batch = usernames.slice(i, i + BATCH_SIZE)
+      const batchItems = await fetchInstagramBatch(batch)
+      if (Array.isArray(batchItems)) items.push(...batchItems)
     }
-
-    const items = await runRes.json()
 
     for (const item of items) {
       const username = normalizeHandle(item.username || item.userName || item.ownerUsername)
