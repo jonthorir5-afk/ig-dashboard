@@ -16,6 +16,32 @@ function json(data, status = 200) {
   })
 }
 
+async function apifyFetchJson(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Apify error ${res.status}: ${text.slice(0, 300)}`)
+    }
+
+    return await res.json()
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Apify request timed out after ${Math.round(timeoutMs / 1000)}s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function parseBody(req) {
   try {
     return await req.json()
@@ -92,59 +118,45 @@ async function getInstagramAccounts(handles = []) {
 }
 
 async function startRun(usernames) {
-  const res = await fetch(
+  const data = await apifyFetchJson(
     `https://api.apify.com/v2/acts/${APIFY_PROFILE_SCRAPER}/runs?token=${APIFY_TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usernames }),
-    }
+    },
+    15000
   )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Apify error ${res.status}: ${text.slice(0, 300)}`)
-  }
-
-  const data = await res.json()
   return data.data || data
 }
 
 async function getRun(runId) {
-  const res = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Apify status error ${res.status}: ${text.slice(0, 300)}`)
-  }
-  const data = await res.json()
+  const data = await apifyFetchJson(
+    `https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`,
+    {},
+    8000
+  )
   return data.data || data
 }
 
 async function getDatasetItems(datasetId) {
-  const res = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&clean=true`)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Apify dataset error ${res.status}: ${text.slice(0, 300)}`)
-  }
-  return res.json()
+  return apifyFetchJson(
+    `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&clean=true`,
+    {},
+    15000
+  )
 }
 
 async function fetchFollowersFallback(username) {
-  const res = await fetch(
+  const items = await apifyFetchJson(
     `https://api.apify.com/v2/acts/${APIFY_FOLLOWERS_SCRAPER}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usernames: [username] }),
-    }
+    },
+    20000
   )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Apify followers fallback ${res.status}: ${text.slice(0, 300)}`)
-  }
-
-  const items = await res.json()
   const item = Array.isArray(items) ? items[0] : null
   if (!item) return { followers: null, following: null }
 
