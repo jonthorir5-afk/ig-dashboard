@@ -88,6 +88,21 @@ function firstNumber(...values) {
   return null
 }
 
+function getFollowerDebugFields(item) {
+  return {
+    followersCount: item.followersCount ?? null,
+    followers_count: item.followers_count ?? null,
+    follower_count: item.follower_count ?? null,
+    followers: item.followers ?? null,
+    followersText: item.followersText ?? null,
+    followers_text: item.followers_text ?? null,
+    ownerFollowersCount: item.owner?.followersCount ?? null,
+    ownerFollowers: item.owner?.followers ?? null,
+    edgeFollowedBy: item.edge_followed_by?.count ?? null,
+    keys: Object.keys(item || {}).slice(0, 30),
+  }
+}
+
 async function getInstagramAccounts(handles = []) {
   let query = supabase
     .from('accounts')
@@ -140,7 +155,7 @@ async function getDatasetItems(datasetId) {
 
 async function importItems(accounts, items) {
   const today = new Date().toISOString().split('T')[0]
-  const results = { synced: 0, skipped: 0, errors: [], details: [] }
+  const results = { synced: 0, skipped: 0, errors: [], details: [], _debug: {} }
 
   for (const item of items) {
     const username = normalizeHandle(item.username || item.userName || item.ownerUsername || item.user || item.handle)
@@ -175,7 +190,9 @@ async function importItems(accounts, items) {
       item.owner?.following,
       item.edge_follow?.count
     )
-    const followerSource = followers != null ? 'followers-scraper' : 'missing'
+    const scrapedFollowers = followers
+    const scrapedFollowing = following
+    let followerSource = scrapedFollowers != null ? 'scraper' : 'missing'
 
     const snapshot = {
       account_id: account.id,
@@ -214,41 +231,60 @@ async function importItems(accounts, items) {
     if (existing?.length) {
       if (snapshot.followers == null) snapshot.followers = existing[0].followers ?? fallbackSnapshot?.followers ?? null
       if (snapshot.following == null) snapshot.following = existing[0].following ?? fallbackSnapshot?.following ?? null
+      if (scrapedFollowers == null) {
+        if (existing[0].followers != null || existing[0].following != null) followerSource = 'saved-value'
+        else if (fallbackSnapshot?.followers != null || fallbackSnapshot?.following != null) followerSource = 'previous-snapshot'
+      }
+      snapshot.notes = `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`
 
       const { error } = await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
       if (error) {
         results.errors.push(`@${resolvedHandle}: update failed — ${error.message}`)
       } else {
         results.synced++
+        if (scrapedFollowers == null) {
+          results._debug[resolvedHandle] = getFollowerDebugFields(item)
+        }
         results.details.push({
           handle: resolvedHandle,
           action: 'updated',
           followers: snapshot.followers,
           views_7d: null,
-          warning: followers == null ? 'followers unavailable from scraper' : undefined,
+          warning: followerSource === 'missing' ? 'followers unavailable from scraper' : undefined,
           follower_source: followerSource,
+          _debug: scrapedFollowers == null ? getFollowerDebugFields(item) : undefined,
         })
       }
     } else {
       if (snapshot.followers == null) snapshot.followers = fallbackSnapshot?.followers ?? null
       if (snapshot.following == null) snapshot.following = fallbackSnapshot?.following ?? null
+      if (scrapedFollowers == null && (fallbackSnapshot?.followers != null || fallbackSnapshot?.following != null)) {
+        followerSource = 'previous-snapshot'
+      }
+      snapshot.notes = `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`
 
       const { error } = await supabase.from('snapshots').insert(snapshot)
       if (error) {
         results.errors.push(`@${resolvedHandle}: insert failed — ${error.message}`)
       } else {
         results.synced++
+        if (scrapedFollowers == null) {
+          results._debug[resolvedHandle] = getFollowerDebugFields(item)
+        }
         results.details.push({
           handle: resolvedHandle,
           action: 'created',
           followers: snapshot.followers,
           views_7d: null,
-          warning: followers == null ? 'followers unavailable from scraper' : undefined,
+          warning: followerSource === 'missing' ? 'followers unavailable from scraper' : undefined,
           follower_source: followerSource,
+          _debug: scrapedFollowers == null ? getFollowerDebugFields(item) : undefined,
         })
       }
     }
   }
+
+  if (!Object.keys(results._debug).length) delete results._debug
 
   const syncedHandles = new Set(results.details.map(detail => normalizeHandle(detail.handle)))
   for (const account of accounts) {

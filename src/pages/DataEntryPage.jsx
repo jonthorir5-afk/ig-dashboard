@@ -33,6 +33,36 @@ function savePendingInstagramRuns(runs) {
   }
 }
 
+function dedupeSyncDetails(details = []) {
+  const byKey = new Map()
+  for (const detail of details) {
+    if (detail.action === 'started') {
+      byKey.set('started', detail)
+      continue
+    }
+    const key = [
+      detail._platform || 'local',
+      detail.handle || '',
+      detail.action || '',
+      detail.model || '',
+    ].join(':')
+    byKey.set(key, detail)
+  }
+  return Array.from(byKey.values())
+}
+
+function dedupeStrings(values = []) {
+  return Array.from(new Set(values))
+}
+
+function getFollowerSourceLabel(source) {
+  if (source === 'scraper') return 'fetched from scraper'
+  if (source === 'saved-value') return 'used saved value'
+  if (source === 'previous-snapshot') return 'used previous snapshot'
+  if (source === 'missing') return 'followers unavailable from scraper'
+  return ''
+}
+
 export default function DataEntryPage() {
   const { user } = useAuth()
   const [models, setModels] = useState([])
@@ -81,6 +111,8 @@ export default function DataEntryPage() {
   }, [accounts, selectedModel])
 
   const currentAccount = useMemo(() => accounts.find(a => a.id === selectedAccount), [accounts, selectedAccount])
+  const displaySyncDetails = useMemo(() => dedupeSyncDetails(syncResults?.details || []), [syncResults])
+  const displaySyncErrors = useMemo(() => dedupeStrings(syncResults?.errors || []), [syncResults])
 
   useEffect(() => {
     if (entryMode === 'api-mapping') {
@@ -350,8 +382,8 @@ export default function DataEntryPage() {
           ...base,
           synced: (base.synced || 0) + progress.synced,
           skipped: (base.skipped || 0) + progress.skipped,
-          errors: [...(base.errors || []), ...progress.errors],
-          details: [...(base.details || []), ...progress.details],
+          errors: dedupeStrings([...(base.errors || []), ...progress.errors]),
+          details: dedupeSyncDetails([...(base.details || []), ...progress.details]),
           pending: progress.pending,
           source: 'instagram-background',
         }
@@ -682,11 +714,11 @@ export default function DataEntryPage() {
                       </p>
                     )}
 
-                    {syncResults.details?.length > 0 && (
+                    {displaySyncDetails.length > 0 && (
                       <div style={{ marginTop: '0.75rem' }}>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Details:</p>
                         <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
-                          {syncResults.details.map((d, i) => (
+                          {displaySyncDetails.map((d, i) => (
                             <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
                               {d.action === 'started' && syncResults.pending > 0 && `Instagram background jobs queued`}
                               {d.handle && `@${d.handle} — ${d.action}`}
@@ -699,7 +731,8 @@ export default function DataEntryPage() {
                               {d.tweets != null && !d.tweets_7d && `, ${d.tweets} tweets`}
                               {d.videos_7d != null && `, ${d.videos_7d} videos`}
                               {d.model && d.subscribers != null && `${d.model} (@${d.of_username || ''}) — ${d.subscribers.toLocaleString()} subscribers`}
-                              {d.warning && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>({d.warning})</span>}
+                              {d.follower_source && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>({getFollowerSourceLabel(d.follower_source)})</span>}
+                              {!d.follower_source && d.warning && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>({d.warning})</span>}
                               {d._platform && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>[{d._platform}]</span>}
                             </div>
                           ))}
@@ -722,10 +755,10 @@ export default function DataEntryPage() {
                   </>
                 )}
 
-                {syncResults.errors?.length > 0 && (
+                {displaySyncErrors.length > 0 && (
                   <div style={{ marginTop: '0.75rem' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--accent-danger)', marginBottom: '0.5rem' }}>Errors:</p>
-                    {syncResults.errors.map((e, i) => (
+                    {displaySyncErrors.map((e, i) => (
                       <p key={i} style={{ fontSize: '0.8rem', color: 'var(--accent-danger)' }}>{e}</p>
                     ))}
                   </div>
