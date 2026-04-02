@@ -6,7 +6,7 @@ const supabase = createClient(
 )
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN
-const APIFY_PROFILE_SCRAPER = 'apify/instagram-profile-scraper'
+const APIFY_PROFILE_SCRAPER = 'apify~instagram-profile-scraper'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
