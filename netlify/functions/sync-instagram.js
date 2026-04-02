@@ -42,15 +42,36 @@ function getRecentPosts(item) {
   return item.latestPosts || item.latest_posts || item.posts || item.recentPosts || []
 }
 
+function parseCompactNumber(value) {
+  if (value == null || value === '') return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
+  const normalized = String(value).trim().replace(/,/g, '')
+  if (!normalized) return null
+
+  const match = normalized.match(/^(-?\d+(?:\.\d+)?)([kmb])?$/i)
+  if (!match) {
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const base = Number(match[1])
+  if (!Number.isFinite(base)) return null
+
+  const suffix = (match[2] || '').toLowerCase()
+  const multiplier =
+    suffix === 'k' ? 1_000 :
+    suffix === 'm' ? 1_000_000 :
+    suffix === 'b' ? 1_000_000_000 :
+    1
+
+  return Math.round(base * multiplier)
+}
+
 function firstNumber(...values) {
   for (const value of values) {
     if (value == null || value === '') continue
-    if (typeof value === 'string') {
-      const parsed = Number(String(value).replace(/,/g, '').trim())
-      if (Number.isFinite(parsed)) return parsed
-      continue
-    }
-    const parsed = Number(value)
+    const parsed = parseCompactNumber(value)
     if (Number.isFinite(parsed)) return parsed
   }
   return null
