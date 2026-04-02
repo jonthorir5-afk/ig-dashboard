@@ -42,6 +42,20 @@ function getRecentPosts(item) {
   return item.latestPosts || item.latest_posts || item.posts || item.recentPosts || []
 }
 
+function firstNumber(...values) {
+  for (const value of values) {
+    if (value == null || value === '') continue
+    if (typeof value === 'string') {
+      const parsed = Number(String(value).replace(/,/g, '').trim())
+      if (Number.isFinite(parsed)) return parsed
+      continue
+    }
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
 async function getInstagramAccounts(handles = []) {
   let query = supabase
     .from('accounts')
@@ -127,8 +141,23 @@ async function importItems(accounts, items) {
       return Math.max(max, value)
     }, 0)
 
-    const followers = Number(item.followersCount || item.followers || 0) || null
-    const following = Number(item.followsCount || item.followingCount || item.following || 0) || null
+    const followers = firstNumber(
+      item.followersCount,
+      item.followers,
+      item.followers_count,
+      item.edge_followed_by?.count,
+      item.owner?.followersCount,
+      item.profile?.followersCount
+    )
+    const following = firstNumber(
+      item.followsCount,
+      item.followingCount,
+      item.following,
+      item.following_count,
+      item.edge_follow?.count,
+      item.owner?.followingCount,
+      item.profile?.followingCount
+    )
 
     const vtfrValues = posts7d
       .map(post => {
@@ -160,7 +189,7 @@ async function importItems(accounts, items) {
       vtfr_weekly: vtfrValues.length ? average(vtfrValues) : null,
       engagement_rate_weekly: erValues.length ? average(erValues) : null,
       captured_by: 'API-Instagram',
-      notes: 'Auto-synced via Apify public Instagram profile data.',
+      notes: `Auto-synced via Apify public Instagram profile data. Followers source: ${followers != null ? 'resolved' : 'missing'}.`,
     }
 
     const { data: existing } = await supabase
