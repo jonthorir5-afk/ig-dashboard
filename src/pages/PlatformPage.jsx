@@ -1,12 +1,33 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
-import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking } from '../lib/api'
+import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
 import Sparkline from '../components/charts/Sparkline'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
 const PLATFORM_LABELS = { instagram: 'Instagram', twitter: 'Twitter / X', reddit: 'Reddit', tiktok: 'TikTok' }
+
+function getAccountUrl(account) {
+  if (account.account_url) return account.account_url
+  switch (account.platform) {
+    case 'instagram':
+      return `https://instagram.com/${account.handle}`
+    case 'twitter':
+      return `https://x.com/${account.handle}`
+    case 'reddit':
+      return `https://reddit.com/user/${account.handle}`
+    case 'tiktok':
+      return `https://tiktok.com/@${account.handle}`
+    default:
+      return null
+  }
+}
+
+function formatChange(value) {
+  if (!Number.isFinite(value) || value === 0) return '0%'
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
+}
 
 export default function PlatformPage() {
   const { platform } = useParams()
@@ -14,6 +35,7 @@ export default function PlatformPage() {
   const [snapshots, setSnapshots] = useState([])
   const [history, setHistory] = useState([])
   const [ofTracking, setOfTracking] = useState([])
+  const [linkMappings, setLinkMappings] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('followers')
@@ -26,8 +48,14 @@ export default function PlatformPage() {
   }, [platform])
 
   useEffect(() => {
-    Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60), getLatestOFTracking(90)])
-      .then(([accs, snaps, hist, tracking]) => { setAccounts(accs); setSnapshots(snaps); setHistory(hist); setOfTracking(tracking) })
+    Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60), getLatestOFTracking(90), getLinkMappings()])
+      .then(([accs, snaps, hist, tracking, mappings]) => {
+        setAccounts(accs)
+        setSnapshots(snaps)
+        setHistory(hist)
+        setOfTracking(tracking)
+        setLinkMappings(mappings)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -37,10 +65,12 @@ export default function PlatformPage() {
       snapByAccount[s.account_id] = s
     }
     const ofByAccount = Object.fromEntries(ofTracking.map(row => [row.account_id, row]))
+    const mappingByAccount = Object.fromEntries(linkMappings.map(row => [row.account_id, row]))
     let result = accounts.map(a => ({
       ...a,
       snapshot: snapByAccount[a.id] || null,
       ofTracking: ofByAccount[a.id] || null,
+      linkMapping: mappingByAccount[a.id] || null,
       _followers: snapByAccount[a.id]?.followers || 0,
       _views: getSnapshotViews(snapByAccount[a.id]),
       _clicks: getSnapshotClicks(snapByAccount[a.id]),
@@ -60,7 +90,7 @@ export default function PlatformPage() {
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
     return result
-  }, [accounts, snapshots, ofTracking, selectedPlatform, selectedModelIds, search, sortKey, sortDir])
+  }, [accounts, snapshots, ofTracking, linkMappings, selectedPlatform, selectedModelIds, search, sortKey, sortDir])
 
   const requestSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
@@ -87,7 +117,7 @@ export default function PlatformPage() {
   }
 
   // Sparkline data per account from history
-  const sparklines = useMemo(() => {
+  const trendByAccount = useMemo(() => {
     const byAccount = {}
     for (const s of history) {
       if (!byAccount[s.account_id]) byAccount[s.account_id] = []
@@ -96,7 +126,16 @@ export default function PlatformPage() {
     const result = {}
     for (const [aid, snaps] of Object.entries(byAccount)) {
       const sorted = snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
-      result[aid] = sorted.map(s => s.followers || 0)
+      const followerSeries = sorted.map(s => s.followers || 0)
+      const viewSeries = sorted.map(s => getSnapshotViews(s))
+      const series = viewSeries.some(v => v > 0) ? viewSeries : followerSeries
+      const firstFollowers = followerSeries[0] || 0
+      const lastFollowers = followerSeries[followerSeries.length - 1] || 0
+      const followerGrowthPct = firstFollowers > 0 ? ((lastFollowers - firstFollowers) / firstFollowers) * 100 : (lastFollowers > 0 ? 100 : 0)
+      result[aid] = {
+        series,
+        followerGrowthPct,
+      }
     }
     return result
   }, [history])
@@ -113,6 +152,8 @@ export default function PlatformPage() {
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
   }, [history, selectedPlatform])
 
+  const showInstagramMetrics = selectedPlatform === 'instagram'
+
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
   return (
@@ -126,7 +167,8 @@ export default function PlatformPage() {
           const rows = merged.map(a => ({
             handle: a.handle, model: a.model?.name, platform: a.platform,
             health: a.health, followers: a._followers, views_7d: a._views,
-            clicks_7d: a._clicks, vtfr: a._vtfr, er: a._er, of_link: a.ofTracking?.tracking_link_name || '',
+            clicks_7d: a._clicks, follower_growth_pct: trendByAccount[a.id]?.followerGrowthPct?.toFixed(1) || '0.0',
+            vtfr: a._vtfr, er: a._er, of_link: a.ofTracking?.tracking_link_name || a.linkMapping?.tracking_link_name || '',
             of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1), of_revenue: a._ofRevenue
           }))
           exportToCSV(rows, `${selectedPlatform || 'all-platforms'}.csv`)
@@ -208,17 +250,34 @@ export default function PlatformPage() {
                 <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs <SortIcon k="ofSubs" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('ofCvr')}>CVR <SortIcon k="ofCvr" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('ofRevenue')}>Revenue <SortIcon k="ofRevenue" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('er')}>ER <SortIcon k="er" /></th>
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('er')}>ER <SortIcon k="er" /></th>}
               </tr>
             </thead>
             <tbody>
               {merged.map((a, i) => {
                 const hc = healthColor(a.health)
+                const trend = trendByAccount[a.id]
+                const hasMapping = Boolean(a.linkMapping)
+                const hasTracking = Boolean(a.ofTracking)
+                const accountUrl = getAccountUrl(a)
+                const ofStatus = hasTracking
+                  ? (a.ofTracking?.tracking_link_name || 'Mapped')
+                  : hasMapping
+                    ? 'Not synced yet'
+                    : 'Unmapped'
                 return (
                   <tr key={a.id} style={a.health !== 'Clean' ? { background: 'rgba(239, 68, 68, 0.03)' } : undefined}>
                     <td style={{ color: 'var(--text-tertiary)' }}>{i + 1}</td>
-                    <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
+                    <td>
+                      {accountUrl ? (
+                        <a href={accountUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+                          @{a.handle}
+                        </a>
+                      ) : (
+                        <strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong>
+                      )}
+                    </td>
                     <td>{a.model?.name || '—'}</td>
                     {!selectedPlatform && <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>}
                     <td>
@@ -227,23 +286,32 @@ export default function PlatformPage() {
                       </span>
                     </td>
                     <td className="numeric font-semibold">{formatNumber(a._followers)}</td>
-                    <td style={{ textAlign: 'center' }}><Sparkline data={sparklines[a.id] || []} /></td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                        <Sparkline data={trend?.series || []} width={92} height={30} />
+                        <span style={{ fontSize: '0.72rem', color: trend?.followerGrowthPct > 0 ? '#10b981' : trend?.followerGrowthPct < 0 ? '#ef4444' : 'var(--text-tertiary)' }}>
+                          {formatChange(trend?.followerGrowthPct || 0)}
+                        </span>
+                      </div>
+                    </td>
                     <td className="numeric font-semibold">{formatNumber(a._views)}</td>
                     <td className="numeric">{formatNumber(a._clicks)}</td>
-                    <td className="numeric" style={{ textAlign: 'left', fontSize: '0.8rem', color: a.ofTracking ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{a.ofTracking?.tracking_link_name || '—'}</td>
+                    <td className="numeric" style={{ textAlign: 'left', fontSize: '0.8rem', color: hasTracking ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                      {ofStatus}
+                    </td>
                     <td className="numeric">{formatNumber(a._ofClicks)}</td>
                     <td className="numeric font-semibold">{formatNumber(a._ofSubs)}</td>
                     <td className="numeric">{a._ofClicks ? `${a._ofCvr.toFixed(1)}%` : '—'}</td>
-                    <td className="numeric">{a._ofRevenue ? `$${formatNumber(a._ofRevenue)}` : '—'}</td>
-                    <td className="numeric">{a._vtfr ? a._vtfr.toFixed(1) + '%' : '—'}</td>
-                    <td className="numeric">{a._er ? a._er.toFixed(1) + '%' : '—'}</td>
+                    <td className="numeric">{hasTracking ? `$${formatNumber(a._ofRevenue)}` : '—'}</td>
+                    {showInstagramMetrics && <td className="numeric">{a._vtfr ? a._vtfr.toFixed(1) + '%' : '—'}</td>}
+                    {showInstagramMetrics && <td className="numeric">{a._er ? a._er.toFixed(1) + '%' : '—'}</td>}
                   </tr>
                 )
               })}
               {merged.length === 0 && (
                 <tr>
                   <td
-                    colSpan={selectedPlatform ? 15 : 16}
+                    colSpan={(selectedPlatform ? 13 : 14) + (showInstagramMetrics ? 2 : 0)}
                     style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}
                   >
                     No accounts found.
