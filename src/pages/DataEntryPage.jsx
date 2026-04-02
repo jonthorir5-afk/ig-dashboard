@@ -611,6 +611,7 @@ export default function DataEntryPage() {
                               {d.tweets != null && !d.tweets_7d && `, ${d.tweets} tweets`}
                               {d.videos_7d != null && `, ${d.videos_7d} videos`}
                               {d.model && d.subscribers != null && `${d.model} (@${d.of_username || ''}) — ${d.subscribers.toLocaleString()} subscribers`}
+                              {d.warning && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>({d.warning})</span>}
                               {d._platform && <span style={{ color: 'var(--text-tertiary)', marginLeft: '4px' }}>[{d._platform}]</span>}
                             </div>
                           ))}

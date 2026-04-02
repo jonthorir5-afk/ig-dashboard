@@ -194,26 +194,56 @@ async function importItems(accounts, items) {
 
     const { data: existing } = await supabase
       .from('snapshots')
-      .select('id')
+      .select('id, followers, following')
       .eq('account_id', account.id)
       .eq('snapshot_date', today)
       .limit(1)
 
+    let fallbackSnapshot = null
+    if (snapshot.followers == null || snapshot.following == null) {
+      const { data: previousSnapshots } = await supabase
+        .from('snapshots')
+        .select('followers, following, snapshot_date')
+        .eq('account_id', account.id)
+        .order('snapshot_date', { ascending: false })
+        .limit(5)
+
+      fallbackSnapshot = (previousSnapshots || []).find(row => row.followers != null || row.following != null) || null
+    }
+
     if (existing?.length) {
+      if (snapshot.followers == null) snapshot.followers = existing[0].followers ?? fallbackSnapshot?.followers ?? null
+      if (snapshot.following == null) snapshot.following = existing[0].following ?? fallbackSnapshot?.following ?? null
+
       const { error } = await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
       if (error) {
         results.errors.push(`@${username}: update failed — ${error.message}`)
       } else {
         results.synced++
-        results.details.push({ handle: username, action: 'updated', followers, views_7d: views7d })
+        results.details.push({
+          handle: username,
+          action: 'updated',
+          followers: snapshot.followers,
+          views_7d: views7d,
+          warning: followers == null ? 'followers unavailable from scraper' : undefined,
+        })
       }
     } else {
+      if (snapshot.followers == null) snapshot.followers = fallbackSnapshot?.followers ?? null
+      if (snapshot.following == null) snapshot.following = fallbackSnapshot?.following ?? null
+
       const { error } = await supabase.from('snapshots').insert(snapshot)
       if (error) {
         results.errors.push(`@${username}: insert failed — ${error.message}`)
       } else {
         results.synced++
-        results.details.push({ handle: username, action: 'created', followers, views_7d: views7d })
+        results.details.push({
+          handle: username,
+          action: 'created',
+          followers,
+          views_7d: views7d,
+          warning: followers == null ? 'followers unavailable from scraper' : undefined,
+        })
       }
     }
   }
