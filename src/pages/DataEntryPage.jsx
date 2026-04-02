@@ -264,10 +264,46 @@ export default function DataEntryPage() {
   }
 
   const handleApiSync = async (platform, options = {}) => {
-    const { silent = false } = options
-    setSyncing(true)
+    const { silent = false, manageSyncing = true } = options
+    if (manageSyncing) setSyncing(true)
     if (!silent) setSyncResults(null)
     try {
+      if (platform === 'instagram') {
+        const instagramAccounts = accounts
+          .filter(account => account.platform === 'instagram' && account.status === 'Active')
+          .map(account => account.handle)
+
+        const batchSize = 1
+        const aggregated = { synced: 0, skipped: 0, errors: [], details: [] }
+
+        for (let i = 0; i < instagramAccounts.length; i += batchSize) {
+          const handles = instagramAccounts.slice(i, i + batchSize)
+          const res = await fetch('/.netlify/functions/sync-instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handles }),
+          })
+          const text = await res.text()
+          let data
+          try { data = JSON.parse(text) } catch { throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 500)}`) }
+          if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`)
+          aggregated.synced += data.synced || 0
+          aggregated.skipped += data.skipped || 0
+          if (data.errors?.length) aggregated.errors.push(...data.errors)
+          if (data.details?.length) aggregated.details.push(...data.details)
+        }
+
+        if (!silent) setSyncResults(aggregated)
+        logAudit({
+          action: 'api_sync',
+          entity_type: 'platform',
+          entity_id: platform,
+          details: `API sync: ${aggregated.synced} accounts updated, ${aggregated.errors?.length || 0} errors`,
+          user_id: user?.id,
+        })
+        return aggregated
+      }
+
       const fetchOpts = { method: 'POST' }
       if (platform === 'onlyfans') {
         fetchOpts.headers = { 'Content-Type': 'application/json' }
@@ -291,7 +327,7 @@ export default function DataEntryPage() {
       if (!silent) setSyncResults({ synced: 0, errors: [err.message] })
       throw err
     } finally {
-      setSyncing(false)
+      if (manageSyncing) setSyncing(false)
     }
   }
 
@@ -301,6 +337,14 @@ export default function DataEntryPage() {
     const allResults = { synced: 0, errors: [], details: [] }
     for (const platform of ['instagram', 'twitter', 'twitter-views', 'reddit', 'tiktok-views', 'onlyfans']) {
       try {
+        if (platform === 'instagram') {
+          const data = await handleApiSync('instagram', { silent: true, manageSyncing: false })
+          allResults.synced += data.synced || 0
+          if (data.errors?.length) allResults.errors.push(...data.errors.map(e => `[${platform}] ${e}`))
+          if (data.details?.length) allResults.details.push(...data.details.map(d => ({ ...d, _platform: platform })))
+          continue
+        }
+
         const fetchOpts = { method: 'POST' }
         if (platform === 'onlyfans') {
           fetchOpts.headers = { 'Content-Type': 'application/json' }

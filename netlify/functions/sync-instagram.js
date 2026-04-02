@@ -61,15 +61,31 @@ async function fetchInstagramBatch(usernames) {
   }
 }
 
+async function parseBody(req) {
+  try {
+    return await req.json()
+  } catch {
+    return {}
+  }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
   if (!APIFY_TOKEN) return json({ error: 'APIFY_TOKEN not configured' }, 500)
+  const body = await parseBody(req)
+  const requestedHandles = Array.isArray(body.handles) ? body.handles.map(normalizeHandle).filter(Boolean) : []
 
-  const { data: accounts, error: accErr } = await supabase
+  let accountsQuery = supabase
     .from('accounts')
     .select('id, handle, model_id')
     .eq('platform', 'instagram')
     .eq('status', 'Active')
+
+  if (requestedHandles.length > 0) {
+    accountsQuery = accountsQuery.in('handle', requestedHandles)
+  }
+
+  const { data: accounts, error: accErr } = await accountsQuery
 
   if (accErr) return json({ error: accErr.message }, 500)
   if (!accounts.length) return json({ message: 'No active Instagram accounts found', synced: 0 })
