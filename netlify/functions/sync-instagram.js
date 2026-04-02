@@ -6,7 +6,6 @@ const supabase = createClient(
 )
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN
-const APIFY_PROFILE_SCRAPER = 'apify~instagram-profile-scraper'
 const APIFY_FOLLOWERS_SCRAPER = 'apify~instagram-followers-count-scraper'
 
 function json(data, status = 200) {
@@ -52,21 +51,6 @@ async function parseBody(req) {
 
 function normalizeHandle(handle) {
   return (handle || '').trim().replace(/^@/, '').toLowerCase()
-}
-
-function toDate(value) {
-  if (!value) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function average(values) {
-  if (!values.length) return 0
-  return values.reduce((sum, value) => sum + value, 0) / values.length
-}
-
-function getRecentPosts(item) {
-  return item.latestPosts || item.latest_posts || item.posts || item.recentPosts || []
 }
 
 function parseCompactNumber(value) {
@@ -119,7 +103,7 @@ async function getInstagramAccounts(handles = []) {
 
 async function startRun(usernames) {
   const data = await apifyFetchJson(
-    `https://api.apify.com/v2/acts/${APIFY_PROFILE_SCRAPER}/runs?token=${APIFY_TOKEN}`,
+    `https://api.apify.com/v2/acts/${APIFY_FOLLOWERS_SCRAPER}/runs?token=${APIFY_TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,113 +131,46 @@ async function getDatasetItems(datasetId) {
   )
 }
 
-async function fetchFollowersFallback(username) {
-  const items = await apifyFetchJson(
-    `https://api.apify.com/v2/acts/${APIFY_FOLLOWERS_SCRAPER}/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usernames: [username] }),
-    },
-    20000
-  )
-  const item = Array.isArray(items) ? items[0] : null
-  if (!item) return { followers: null, following: null }
-
-  return {
-    followers: firstNumber(
-      item.followersCount,
-      item.follower_count,
-      item.followers,
-      item.number_of_members
-    ),
-    following: firstNumber(
-      item.followsCount,
-      item.followingCount,
-      item.following_count,
-      item.following
-    ),
-  }
-}
-
 async function importItems(accounts, items) {
   const today = new Date().toISOString().split('T')[0]
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
   const results = { synced: 0, skipped: 0, errors: [], details: [] }
 
   for (const item of items) {
-    const username = normalizeHandle(item.username || item.userName || item.ownerUsername)
+    const username = normalizeHandle(item.username || item.userName || item.ownerUsername || item.user || item.handle)
     if (!username) continue
 
     const account = accounts.find(acc => normalizeHandle(acc.handle) === username)
     if (!account) continue
 
-    const posts = getRecentPosts(item)
-    const posts7d = posts.filter(post => {
-      const date = toDate(post.timestamp || post.takenAt || post.createdAt)
-      return date && date >= sevenDaysAgo
-    })
-    const posts30d = posts.filter(post => {
-      const date = toDate(post.timestamp || post.takenAt || post.createdAt)
-      return date && date >= thirtyDaysAgo
-    })
-
-    const views7d = posts7d.reduce((sum, post) => sum + Number(post.videoViewCount || post.video_play_count || post.videoPlayCount || post.playCount || 0), 0)
-    const views30d = posts30d.reduce((sum, post) => sum + Number(post.videoViewCount || post.video_play_count || post.videoPlayCount || post.playCount || 0), 0)
-    const reels7d = posts7d.filter(post => {
-      const type = String(post.type || post.productType || '').toLowerCase()
-      return type.includes('video') || type.includes('clip') || type.includes('igtv') || type.includes('reel')
-    })
-    const topReelViews = posts.reduce((max, post) => {
-      const value = Number(post.videoViewCount || post.video_play_count || post.videoPlayCount || post.playCount || 0)
-      return Math.max(max, value)
-    }, 0)
-
-    let followers = null
-    let following = null
-    let followerSource = 'missing'
-
-    try {
-      const followerData = await fetchFollowersFallback(username)
-      followers = followerData.followers
-      following = followerData.following
-      if (followers != null) followerSource = 'followers-scraper'
-    } catch (fallbackErr) {
-      results.errors.push(`@${username}: followers lookup failed — ${fallbackErr.message}`)
-    }
-
-    const vtfrValues = posts7d
-      .map(post => {
-        const views = Number(post.videoViewCount || post.video_play_count || post.videoPlayCount || post.playCount || 0)
-        if (!followers || !views) return null
-        return (views / followers) * 100
-      })
-      .filter(value => value != null)
-
-    const erValues = posts7d
-      .map(post => {
-        const views = Number(post.videoViewCount || post.video_play_count || post.videoPlayCount || post.playCount || 0)
-        if (!views) return null
-        const likes = Number(post.likesCount || post.likes || 0)
-        const comments = Number(post.commentsCount || post.comments || 0)
-        return ((likes + comments) / views) * 100
-      })
-      .filter(value => value != null)
+    let followers = firstNumber(
+      item.followersCount,
+      item.follower_count,
+      item.followers,
+      item.number_of_members,
+      item.edge_followed_by?.count
+    )
+    let following = firstNumber(
+      item.followsCount,
+      item.followingCount,
+      item.following_count,
+      item.following,
+      item.edge_follow?.count
+    )
+    const followerSource = followers != null ? 'followers-scraper' : 'missing'
 
     const snapshot = {
       account_id: account.id,
       snapshot_date: today,
       followers,
       following,
-      ig_views_7d: views7d || null,
-      ig_views_30d: views30d || null,
-      ig_reels_posted_7d: reels7d.length || null,
-      ig_top_reel_views: topReelViews || null,
-      vtfr_weekly: vtfrValues.length ? average(vtfrValues) : null,
-      engagement_rate_weekly: erValues.length ? average(erValues) : null,
+      ig_views_7d: null,
+      ig_views_30d: null,
+      ig_reels_posted_7d: null,
+      ig_top_reel_views: null,
+      vtfr_weekly: null,
+      engagement_rate_weekly: null,
       captured_by: 'API-Instagram',
-      notes: `Auto-synced via Apify public Instagram profile data. Followers source: ${followerSource}.`,
+      notes: `Auto-synced via Apify Instagram followers count scraper. Followers source: ${followerSource}.`,
     }
 
     const { data: existing } = await supabase
@@ -288,7 +205,7 @@ async function importItems(accounts, items) {
           handle: username,
           action: 'updated',
           followers: snapshot.followers,
-          views_7d: views7d,
+          views_7d: null,
           warning: followers == null ? 'followers unavailable from scraper' : undefined,
           follower_source: followerSource,
         })
@@ -306,7 +223,7 @@ async function importItems(accounts, items) {
           handle: username,
           action: 'created',
           followers,
-          views_7d: views7d,
+          views_7d: null,
           warning: followers == null ? 'followers unavailable from scraper' : undefined,
           follower_source: followerSource,
         })
