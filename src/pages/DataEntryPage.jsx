@@ -299,7 +299,7 @@ export default function DataEntryPage() {
     setSyncing(true)
     setSyncResults(null)
     const allResults = { synced: 0, errors: [], details: [] }
-    for (const platform of ['twitter', 'twitter-views', 'reddit', 'tiktok-views', 'onlyfans']) {
+    for (const platform of ['instagram', 'twitter', 'twitter-views', 'reddit', 'tiktok-views', 'onlyfans']) {
       try {
         const fetchOpts = { method: 'POST' }
         if (platform === 'onlyfans') {
@@ -446,6 +446,7 @@ export default function DataEntryPage() {
               {syncing ? 'Syncing...' : 'Sync All Platforms'}
             </button>
             <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>or sync individually:</span>
+            <button className="btn btn-secondary" onClick={() => handleApiSync('instagram')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Instagram</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('twitter')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Twitter/X</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('twitter-views')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Twitter Views</button>
             <button className="btn btn-secondary" onClick={() => handleApiSync('reddit')} disabled={syncing} style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}>Reddit</button>

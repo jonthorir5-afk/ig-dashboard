@@ -264,6 +264,100 @@ async function syncReddit() {
   return results
 }
 
+// ── Instagram Sync ──
+async function syncInstagram() {
+  if (!APIFY_TOKEN) return { synced: 0, errors: ['APIFY_TOKEN not configured'] }
+
+  const { data: accounts, error: accErr } = await supabase
+    .from('accounts')
+    .select('id, handle')
+    .eq('platform', 'instagram')
+    .eq('status', 'Active')
+
+  if (accErr) return { synced: 0, errors: [accErr.message] }
+  if (!accounts?.length) return { synced: 0, errors: [] }
+
+  const today = new Date().toISOString().split('T')[0]
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
+  const usernames = accounts.map(a => a.handle.replace(/^@/, ''))
+  const results = { synced: 0, errors: [] }
+
+  try {
+    const runRes = await fetch(
+      `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames }),
+      }
+    )
+
+    if (!runRes.ok) {
+      results.errors.push(`Apify ${runRes.status}`)
+      return results
+    }
+
+    const items = await runRes.json()
+
+    for (const item of items) {
+      const username = (item.username || '').toLowerCase()
+      if (!username) continue
+      const account = accounts.find(a => a.handle.replace(/^@/, '').toLowerCase() === username)
+      if (!account) continue
+
+      const posts = item.latestPosts || []
+      const posts7d = posts.filter(post => {
+        const date = new Date(post.timestamp || post.takenAt || post.createdAt)
+        return !Number.isNaN(date.getTime()) && date >= sevenDaysAgo
+      })
+      const posts30d = posts.filter(post => {
+        const date = new Date(post.timestamp || post.takenAt || post.createdAt)
+        return !Number.isNaN(date.getTime()) && date >= thirtyDaysAgo
+      })
+      const followers = item.followersCount || item.followers || null
+      const views7d = posts7d.reduce((sum, post) => sum + Number(post.videoViewCount || post.playCount || 0), 0)
+      const views30d = posts30d.reduce((sum, post) => sum + Number(post.videoViewCount || post.playCount || 0), 0)
+      const reels7d = posts7d.filter(post => {
+        const type = String(post.type || post.productType || '').toLowerCase()
+        return type.includes('video') || type.includes('clip') || type.includes('igtv') || type.includes('reel')
+      }).length
+      const topReelViews = posts.reduce((max, post) => Math.max(max, Number(post.videoViewCount || post.playCount || 0)), 0)
+
+      const snapshot = {
+        account_id: account.id,
+        snapshot_date: today,
+        followers,
+        following: item.followsCount || item.followingCount || item.following || null,
+        ig_views_7d: views7d || null,
+        ig_views_30d: views30d || null,
+        ig_reels_posted_7d: reels7d || null,
+        ig_top_reel_views: topReelViews || null,
+        captured_by: 'API-Instagram',
+        notes: 'Auto-synced (scheduled) via Apify public Instagram profile data.',
+      }
+
+      const { data: existing } = await supabase
+        .from('snapshots')
+        .select('id')
+        .eq('account_id', account.id)
+        .eq('snapshot_date', today)
+        .limit(1)
+
+      if (existing?.length) {
+        await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
+      } else {
+        await supabase.from('snapshots').insert(snapshot)
+      }
+      results.synced++
+    }
+  } catch (err) {
+    results.errors.push(err.message)
+  }
+
+  return results
+}
+
 // ── OnlyFans Sync ──
 async function syncOnlyFans() {
   if (!OF_API_KEY) return { synced: 0, errors: ['ONLYFANS_API_KEY not configured'] }
@@ -307,7 +401,8 @@ async function syncOnlyFans() {
 export const handler = schedule('0 6 * * *', async () => {
   console.log('Starting daily sync...')
 
-  const [twitter, reddit, onlyfans] = await Promise.all([
+  const [instagram, twitter, reddit, onlyfans] = await Promise.all([
+    syncInstagram(),
     syncTwitter(),
     syncReddit(),
     syncOnlyFans(),
@@ -321,6 +416,7 @@ export const handler = schedule('0 6 * * *', async () => {
 
   const summary = {
     timestamp: new Date().toISOString(),
+    instagram,
     twitter,
     twitterViews,
     reddit,

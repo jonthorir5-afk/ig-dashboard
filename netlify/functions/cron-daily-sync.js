@@ -8,6 +8,10 @@ export const handler = schedule('0 0 * * *', async (event) => {
   console.log('Triggering daily automated syncs...');
   
   try {
+    // Trigger Instagram
+    console.log('Syncing Instagram...');
+    await fetch(`${baseUrl}/.netlify/functions/sync-instagram`, { method: 'POST' });
+
     // Trigger Twitter
     console.log('Syncing Twitter...');
     await fetch(`${baseUrl}/.netlify/functions/sync-twitter`, { method: 'POST' });
