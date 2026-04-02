@@ -70,13 +70,20 @@ function getSubscriberCount(account) {
     || 0
 }
 
-async function listTrackingLinksForAccount(accountId) {
+async function listTrackingLinksForAccount(accountId, options = {}) {
+  const { synchronous = false } = options
   const links = []
   let offset = 0
   const limit = 100
 
   while (true) {
-    const res = await ofFetch(`/${accountId}/tracking-links?limit=${limit}&offset=${offset}`)
+    const search = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    })
+    if (synchronous) search.set('synchronous', 'true')
+
+    const res = await ofFetch(`/${accountId}/tracking-links?${search.toString()}`, synchronous ? 45000 : 20000)
     const payload = res.data || res
     const batch = payload.list || payload.items || payload.data || payload.results || []
 
@@ -113,6 +120,25 @@ async function mapWithConcurrency(items, limit, mapper) {
 function normalizeTrackingLink(link, account) {
   const url = (link.campaignUrl || link.url || link.link || link.tracking_url || '').trim()
   const name = (link.campaignName || link.name || link.label || link.campaign_code || '').trim()
+  const revenuePayload = link.revenue && typeof link.revenue === 'object' ? link.revenue : null
+  const revenueTotal = Number(
+    revenuePayload?.total
+      ?? revenuePayload?.amount
+      ?? link.revenue
+      ?? link.totalRevenue
+      ?? link.revenue_total
+      ?? 0
+  )
+  const revenuePerSubscriber = Number(
+    revenuePayload?.revenuePerSubscriber
+      ?? link.revenue_per_subscriber
+      ?? 0
+  )
+  const revenuePerClick = Number(
+    revenuePayload?.revenuePerClick
+      ?? link.revenue_per_click
+      ?? 0
+  )
 
   return {
     ...link,
@@ -124,7 +150,9 @@ function normalizeTrackingLink(link, account) {
     campaignUrl: url,
     clicks: Number(link.clicks ?? link.click_count ?? link.clicksCount ?? 0),
     subscribers: Number(link.subscribers ?? link.subscriber_count ?? link.subscribersCount ?? 0),
-    revenue: Number(link.revenue ?? link.totalRevenue ?? link.revenue_total ?? 0),
+    revenue: revenueTotal,
+    revenuePerSubscriber,
+    revenuePerClick,
   }
 }
 
@@ -183,7 +211,7 @@ export default async function handler(req) {
     const accountsToFetch = relevantAccounts.length > 0 ? relevantAccounts : ofAccounts
     const trackingLinkResponses = await mapWithConcurrency(accountsToFetch, 4, async (account) => {
       try {
-        const links = await listTrackingLinksForAccount(account.id)
+        const links = await listTrackingLinksForAccount(account.id, { synchronous: action === 'sync' })
         return links.map(link => normalizeTrackingLink(link, account))
       } catch (err) {
         results.errors.push(`Tracking links for ${account.display_name || account.id}: ${err.message}`)
@@ -291,8 +319,8 @@ export default async function handler(req) {
           clicks: matchedLink.clicks,
           subscribers: matchedLink.subscribers,
           revenue_total: matchedLink.revenue,
-          revenue_per_subscriber: matchedLink.subscribers > 0 ? matchedLink.revenue / matchedLink.subscribers : 0,
-          revenue_per_click: matchedLink.clicks > 0 ? matchedLink.revenue / matchedLink.clicks : 0,
+          revenue_per_subscriber: matchedLink.revenuePerSubscriber || (matchedLink.subscribers > 0 ? matchedLink.revenue / matchedLink.subscribers : 0),
+          revenue_per_click: matchedLink.revenuePerClick || (matchedLink.clicks > 0 ? matchedLink.revenue / matchedLink.clicks : 0),
         }, { onConflict: 'account_id,snapshot_date' })
     }
 
