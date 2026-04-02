@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
-import { getAccounts, getLatestSnapshots, getAllSnapshotHistory } from '../lib/api'
+import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
 import Sparkline from '../components/charts/Sparkline'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
@@ -13,6 +13,7 @@ export default function PlatformPage() {
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [history, setHistory] = useState([])
+  const [ofTracking, setOfTracking] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('followers')
@@ -24,8 +25,8 @@ export default function PlatformPage() {
   }, [platform])
 
   useEffect(() => {
-    Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60)])
-      .then(([accs, snaps, hist]) => { setAccounts(accs); setSnapshots(snaps); setHistory(hist) })
+    Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60), getLatestOFTracking(90)])
+      .then(([accs, snaps, hist, tracking]) => { setAccounts(accs); setSnapshots(snaps); setHistory(hist); setOfTracking(tracking) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -34,14 +35,20 @@ export default function PlatformPage() {
     for (const s of snapshots) {
       snapByAccount[s.account_id] = s
     }
+    const ofByAccount = Object.fromEntries(ofTracking.map(row => [row.account_id, row]))
     let result = accounts.map(a => ({
       ...a,
       snapshot: snapByAccount[a.id] || null,
+      ofTracking: ofByAccount[a.id] || null,
       _followers: snapByAccount[a.id]?.followers || 0,
       _views: getSnapshotViews(snapByAccount[a.id]),
       _clicks: getSnapshotClicks(snapByAccount[a.id]),
       _vtfr: snapByAccount[a.id]?.vtfr_weekly || 0,
       _er: snapByAccount[a.id]?.engagement_rate_weekly || 0,
+      _ofClicks: ofByAccount[a.id]?.clicks || 0,
+      _ofSubs: ofByAccount[a.id]?.subscribers || 0,
+      _ofRevenue: Number(ofByAccount[a.id]?.revenue_total || 0),
+      _ofCvr: (ofByAccount[a.id]?.clicks || 0) > 0 ? ((ofByAccount[a.id]?.subscribers || 0) / ofByAccount[a.id].clicks) * 100 : 0,
     }))
     if (selectedPlatform) result = result.filter(a => a.platform === selectedPlatform)
     if (search) result = result.filter(a => a.handle.toLowerCase().includes(search.toLowerCase()) || a.model?.name?.toLowerCase().includes(search.toLowerCase()))
@@ -51,7 +58,7 @@ export default function PlatformPage() {
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
     return result
-  }, [accounts, snapshots, selectedPlatform, search, sortKey, sortDir])
+  }, [accounts, snapshots, ofTracking, selectedPlatform, search, sortKey, sortDir])
 
   const requestSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
@@ -100,7 +107,8 @@ export default function PlatformPage() {
           const rows = merged.map(a => ({
             handle: a.handle, model: a.model?.name, platform: a.platform,
             health: a.health, followers: a._followers, views_7d: a._views,
-            clicks_7d: a._clicks, vtfr: a._vtfr, er: a._er
+            clicks_7d: a._clicks, vtfr: a._vtfr, er: a._er, of_link: a.ofTracking?.tracking_link_name || '',
+            of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1)
           }))
           exportToCSV(rows, `${selectedPlatform || 'all-platforms'}.csv`)
         }}>
@@ -144,7 +152,7 @@ export default function PlatformPage() {
       {/* Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className="accounts-table" style={{ minWidth: '900px' }}>
+          <table className="accounts-table" style={{ minWidth: '1200px' }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -157,6 +165,10 @@ export default function PlatformPage() {
                 <th style={{ textAlign: 'center' }}>Trend</th>
                 <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d <SortIcon k="clicks" /></th>
+                <th className="numeric">OF Link</th>
+                <th className="sortable numeric" onClick={() => requestSort('ofClicks')}>OF Clicks <SortIcon k="ofClicks" /></th>
+                <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs <SortIcon k="ofSubs" /></th>
+                <th className="sortable numeric" onClick={() => requestSort('ofCvr')}>CVR <SortIcon k="ofCvr" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('er')}>ER <SortIcon k="er" /></th>
               </tr>
@@ -180,13 +192,17 @@ export default function PlatformPage() {
                     <td style={{ textAlign: 'center' }}><Sparkline data={sparklines[a.id] || []} /></td>
                     <td className="numeric font-semibold">{formatNumber(a._views)}</td>
                     <td className="numeric">{formatNumber(a._clicks)}</td>
+                    <td className="numeric" style={{ textAlign: 'left', fontSize: '0.8rem', color: a.ofTracking ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{a.ofTracking?.tracking_link_name || '—'}</td>
+                    <td className="numeric">{formatNumber(a._ofClicks)}</td>
+                    <td className="numeric font-semibold">{formatNumber(a._ofSubs)}</td>
+                    <td className="numeric">{a._ofClicks ? `${a._ofCvr.toFixed(1)}%` : '—'}</td>
                     <td className="numeric">{a._vtfr ? a._vtfr.toFixed(1) + '%' : '—'}</td>
                     <td className="numeric">{a._er ? a._er.toFixed(1) + '%' : '—'}</td>
                   </tr>
                 )
               })}
               {merged.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts found.</td></tr>
+                <tr><td colSpan={15} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts found.</td></tr>
               )}
             </tbody>
           </table>

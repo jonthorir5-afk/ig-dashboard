@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Search, Filter, X, Download, Edit2, Trash2 } from 'lucide-react'
-import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount } from '../lib/api'
+import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount, getLatestOFTracking } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { healthColor, exportToCSV } from '../lib/metrics'
 
@@ -12,6 +12,7 @@ const HEALTH_OPTIONS = ['Clean', 'Shadowbanned', 'Restricted', 'Action Blocked',
 export default function AccountsPage() {
   const { canManage } = useAuth()
   const [accounts, setAccounts] = useState([])
+  const [ofTracking, setOfTracking] = useState([])
   const [models, setModels] = useState([])
   const [operators, setOperators] = useState([])
   const [loading, setLoading] = useState(true)
@@ -29,8 +30,9 @@ export default function AccountsPage() {
 
   const load = async () => {
     setLoading(true)
-    const [accs, mods, ops] = await Promise.all([getAccounts(), getModels(), getProfiles()])
+    const [accs, mods, ops, tracking] = await Promise.all([getAccounts(), getModels(), getProfiles(), getLatestOFTracking(90)])
     setAccounts(accs)
+    setOfTracking(tracking)
     setModels(mods)
     setOperators(ops)
     setLoading(false)
@@ -38,13 +40,26 @@ export default function AccountsPage() {
   useEffect(() => { load() }, [])
 
   const filtered = useMemo(() => {
+    const trackingByAccount = Object.fromEntries(ofTracking.map(row => [row.account_id, row]))
     let result = accounts
     if (search) result = result.filter(a => a.handle.toLowerCase().includes(search.toLowerCase()) || a.model?.name?.toLowerCase().includes(search.toLowerCase()))
     if (filterPlatform) result = result.filter(a => a.platform === filterPlatform)
     if (filterModel) result = result.filter(a => a.model_id === filterModel)
     if (filterStatus) result = result.filter(a => a.status === filterStatus)
-    return result
-  }, [accounts, search, filterPlatform, filterModel, filterStatus])
+    return result.map(account => {
+      const of = trackingByAccount[account.id] || null
+      const clicks = of?.clicks || 0
+      const subscribers = of?.subscribers || 0
+      return {
+        ...account,
+        _of: of,
+        _ofClicks: clicks,
+        _ofSubs: subscribers,
+        _ofRevenue: Number(of?.revenue_total || 0),
+        _ofCvr: clicks > 0 ? (subscribers / clicks) * 100 : 0,
+      }
+    })
+  }, [accounts, ofTracking, search, filterPlatform, filterModel, filterStatus])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -80,6 +95,7 @@ export default function AccountsPage() {
     const rows = filtered.map(a => ({
       handle: a.handle, platform: a.platform, model: a.model?.name,
       type: a.account_type, status: a.status, health: a.health,
+      of_link: a._of?.tracking_link_name || '', of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1),
       operator: a.operator?.display_name || '', created: a.created_at
     }))
     exportToCSV(rows, 'accounts.csv')
@@ -130,13 +146,17 @@ export default function AccountsPage() {
       {/* Table */}
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className="accounts-table" style={{ minWidth: '900px' }}>
+          <table className="accounts-table" style={{ minWidth: '1200px' }}>
             <thead>
               <tr>
                 <th>Handle</th>
                 <th>Platform</th>
                 <th>Model</th>
                 <th>Type</th>
+                <th>OF Link</th>
+                <th className="numeric">OF Clicks</th>
+                <th className="numeric">OF Subs</th>
+                <th className="numeric">CVR</th>
                 <th>Status</th>
                 <th>Health</th>
                 <th>Operator</th>
@@ -153,6 +173,10 @@ export default function AccountsPage() {
                     <td style={{ textTransform: 'capitalize' }}>{a.platform === 'twitter' ? 'Twitter / X' : a.platform}</td>
                     <td>{a.model?.name || '—'}</td>
                     <td>{a.account_type}</td>
+                    <td style={{ fontSize: '0.8rem', color: a._of ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{a._of?.tracking_link_name || '—'}</td>
+                    <td className="numeric">{formatCompact(a._ofClicks)}</td>
+                    <td className="numeric font-semibold">{formatCompact(a._ofSubs)}</td>
+                    <td className="numeric">{a._ofClicks ? `${a._ofCvr.toFixed(1)}%` : '—'}</td>
                     <td>{a.status}</td>
                     <td>
                       <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
@@ -173,7 +197,7 @@ export default function AccountsPage() {
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={canManage ? 9 : 8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts match your filters.</td></tr>
+                <tr><td colSpan={canManage ? 13 : 12} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts match your filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -263,4 +287,10 @@ const selectStyle = {
   padding: '0.5rem 0.75rem', borderRadius: '8px',
   border: '1px solid var(--border-color)', background: 'var(--bg-tertiary)',
   color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer'
+}
+
+function formatCompact(value) {
+  if (!value) return '0'
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+  return String(value)
 }

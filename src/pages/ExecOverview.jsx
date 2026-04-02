@@ -85,7 +85,7 @@ export default function ExecOverview() {
   const stats = useMemo(() => {
     if (!data) return null
 
-    const { models, accounts, snapshots } = data
+    const { models, accounts, snapshots, ofTracking = [] } = data
     const activeAccounts = accounts.filter(a => a.status === 'Active')
 
     // Platform counts
@@ -162,6 +162,30 @@ export default function ExecOverview() {
     const accountsWithData = new Set(recentSnapshots.map(s => s.account_id))
     const missingData = activeAccounts.filter(a => !accountsWithData.has(a.id))
 
+    const latestOFByAccount = {}
+    for (const row of ofTracking) {
+      if (!row.account_id) continue
+      if (!latestOFByAccount[row.account_id] || row.snapshot_date > latestOFByAccount[row.account_id].snapshot_date) {
+        latestOFByAccount[row.account_id] = row
+      }
+    }
+    const latestOFArr = Object.values(latestOFByAccount)
+    const totalOFClicks = latestOFArr.reduce((sum, row) => sum + (row.clicks || 0), 0)
+    const totalOFSubs = latestOFArr.reduce((sum, row) => sum + (row.subscribers || 0), 0)
+    const totalOFRevenue = latestOFArr.reduce((sum, row) => sum + Number(row.revenue_total || 0), 0)
+    const topOFDrivers = latestOFArr
+      .map(row => ({
+        handle: row.account?.handle || row.account_id,
+        model: row.account?.model?.display_name || row.account?.model?.name || 'Unknown',
+        platform: row.account?.platform || 'unknown',
+        linkName: row.tracking_link_name,
+        clicks: row.clicks || 0,
+        subscribers: row.subscribers || 0,
+        revenue: Number(row.revenue_total || 0),
+        cvr: (row.clicks || 0) > 0 ? ((row.subscribers || 0) / row.clicks) * 100 : 0,
+      }))
+      .sort((a, b) => b.subscribers - a.subscribers || b.clicks - a.clicks)
+
     return {
       activeModels: models.length,
       totalAccounts: accounts.length,
@@ -178,6 +202,10 @@ export default function ExecOverview() {
       latestSnapshots: latestArr,
       modelRanking,
       platformFollowers,
+      totalOFClicks,
+      totalOFSubs,
+      totalOFRevenue,
+      topOFDrivers: topOFDrivers.slice(0, 8),
     }
   }, [data])
 
@@ -288,6 +316,18 @@ export default function ExecOverview() {
           icon={AlertTriangle} iconClass="winners"
           label="Flagged Accounts"
           value={stats.flagged.length}
+        />
+      </div>
+
+      <div className="metrics-grid">
+        <MetricCard icon={MousePointerClick} iconClass="engagement" label="OF Clicks" value={formatNumber(stats.totalOFClicks)} />
+        <MetricCard icon={Users} iconClass="followers" label="OF Subscribers" value={formatNumber(stats.totalOFSubs)} />
+        <MetricCard icon={BarChart3} iconClass="views" label="OF Revenue" value={`$${formatNumber(stats.totalOFRevenue)}`} />
+        <MetricCard
+          icon={TrendingUp}
+          iconClass="winners"
+          label="OF Conversion"
+          value={stats.totalOFClicks ? `${((stats.totalOFSubs / stats.totalOFClicks) * 100).toFixed(1)}%` : '—'}
         />
       </div>
 
@@ -454,6 +494,42 @@ export default function ExecOverview() {
           />
         </div>
       )}
+
+      <div className="glass-panel" style={{ padding: '1.25rem' }}>
+        <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Top OF Traffic Drivers</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="accounts-table" style={{ minWidth: '900px' }}>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Model</th>
+                <th>Platform</th>
+                <th>OF Link</th>
+                <th className="numeric">Clicks</th>
+                <th className="numeric">Subs</th>
+                <th className="numeric">CVR</th>
+                <th className="numeric">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.topOFDrivers.length > 0 ? stats.topOFDrivers.map(driver => (
+                <tr key={`${driver.handle}-${driver.linkName}`}>
+                  <td><strong style={{ color: 'var(--text-primary)' }}>@{driver.handle}</strong></td>
+                  <td>{driver.model}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{driver.platform}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{driver.linkName || '—'}</td>
+                  <td className="numeric">{formatNumber(driver.clicks)}</td>
+                  <td className="numeric font-semibold">{formatNumber(driver.subscribers)}</td>
+                  <td className="numeric">{driver.clicks ? `${driver.cvr.toFixed(1)}%` : '—'}</td>
+                  <td className="numeric">${formatNumber(driver.revenue)}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No OF tracking data yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Top & Bottom Models + Flagged */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>

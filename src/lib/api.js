@@ -312,6 +312,30 @@ export async function saveLinkMapping(mapping) {
   return data
 }
 
+export async function getOFTracking(days = 90) {
+  if (isDemoMode()) return []
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('of_tracking')
+    .select('*, account:accounts(id, handle, platform, model_id, model:models(id, name, display_name))')
+    .gte('snapshot_date', since)
+    .order('snapshot_date', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function getLatestOFTracking(days = 90) {
+  if (isDemoMode()) return []
+  const data = await getOFTracking(days)
+  const seen = new Set()
+  return data.filter(row => {
+    if (!row.account_id) return false
+    if (seen.has(row.account_id)) return false
+    seen.add(row.account_id)
+    return true
+  })
+}
+
 export async function getExecOverview() {
   if (isDemoMode()) {
     const since = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
@@ -331,7 +355,7 @@ export async function getExecOverview() {
       .gte('snapshot_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0])
       .order('snapshot_date', { ascending: false }),
     supabase.from('of_tracking')
-      .select('model_id, subscribers, clicks, revenue_total, tracking_link_name, snapshot_date')
+      .select('model_id, account_id, subscribers, clicks, revenue_total, tracking_link_name, tracking_link_url, snapshot_date, account:accounts(id, handle, platform, model_id, model:models(id, name, display_name))')
       .order('snapshot_date', { ascending: false })
   ])
 
@@ -347,4 +371,3 @@ export async function getExecOverview() {
     ofTracking: ofTrackingRes.data || [],
   }
 }
-

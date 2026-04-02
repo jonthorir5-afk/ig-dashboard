@@ -39,6 +39,7 @@ export default function DataEntryPage() {
   const [ofLinks, setOfLinks] = useState([])
   const [ofMappings, setOfMappings] = useState([])
   const [loadingLinks, setLoadingLinks] = useState(false)
+  const [ofDiscovery, setOfDiscovery] = useState({ connectedAccounts: [], errors: [] })
 
   // Per-post data (for Instagram VTFR/ER)
   const [posts, setPosts] = useState([])
@@ -69,6 +70,10 @@ export default function DataEntryPage() {
             body: JSON.stringify({ action: 'discover' })
           })
           const data = await res.json()
+          setOfDiscovery({
+            connectedAccounts: data.connectedAccounts || [],
+            errors: data.errors || [],
+          })
           if (data.modelUpdates) console.warn('SYNC MASTER LOG:', JSON.stringify(data.modelUpdates, null, 2))
           if (data.trackingLinks) setOfLinks(data.trackingLinks)
         } catch (e) {
@@ -386,6 +391,7 @@ export default function DataEntryPage() {
                         acc={acc}
                         currentMapping={currentMapping}
                         ofLinks={getScopedTrackingLinks(acc, models, ofLinks)}
+                        discovery={ofDiscovery}
                         onSave={async (linkName, linkDetails) => {
                           const newMap = {
                             tracking_link_name: linkName,
@@ -877,7 +883,7 @@ function NumField({ label, value, prev, onChange }) {
   )
 }
 
-function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
+function MappingInput({ acc, currentMapping, ofLinks, discovery, onSave }) {
   const [text, setText] = useState(currentMapping?.tracking_link_name || '')
   const [isOpen, setIsOpen] = useState(false)
 
@@ -918,6 +924,29 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
       )
       .slice(0, 12)
   }, [normalizedLinks, text])
+
+  const discoveryMessage = useMemo(() => {
+    const targetSlug = normalizeTrackingToken(acc?.of_username_override || acc?.model?.of_username || acc?.model?.display_name || acc?.model?.name)
+    if (!targetSlug) return null
+
+    const connected = (discovery?.connectedAccounts || []).find(account =>
+      normalizeTrackingToken(account.username) === targetSlug
+    )
+    if (!connected) return `No connected OF account found for @${targetSlug}.`
+
+    const relatedError = (discovery?.errors || []).find(error =>
+      error.toLowerCase().includes(targetSlug) || error.toLowerCase().includes(connected.name?.toLowerCase?.() || '')
+    )
+    if (relatedError && relatedError.includes('NEEDS_REAUTHENTICATION')) {
+      return `@${targetSlug} needs re-authentication in OnlyFansAPI.`
+    }
+
+    if (!normalizedLinks.length) {
+      return `Connected OF account found for @${targetSlug}, but 0 tracking links were returned.`
+    }
+
+    return null
+  }, [acc, discovery, normalizedLinks.length])
 
   const selectLink = (link) => {
     setText(link.name || link.url)
@@ -1000,6 +1029,11 @@ function MappingInput({ acc, currentMapping, ofLinks, onSave }) {
           boxShadow: '0 12px 30px rgba(0, 0, 0, 0.25)',
         }}>
           No matching tracking links for this account.
+        </div>
+      )}
+      {discoveryMessage && (
+        <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+          {discoveryMessage}
         </div>
       )}
     </div>
