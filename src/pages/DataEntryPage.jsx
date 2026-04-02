@@ -6,11 +6,31 @@ import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGr
 import { logAudit } from '../lib/automation'
 import CSVImport from '../components/CSVImport'
 
+const INSTAGRAM_SYNC_STORAGE_KEY = 'ig-dashboard-instagram-sync-runs'
+
 const HEALTH_OPTIONS = {
   instagram: ['Clean', 'Shadowbanned', 'Restricted', 'Action Blocked'],
   twitter: ['Clean', 'Shadowbanned', 'Suspended', 'Limited'],
   reddit: ['Clean', 'Shadowbanned', 'Suspended', 'Karma Farming'],
   tiktok: ['Clean', 'Shadowbanned', 'Suspended', 'Under Review']
+}
+
+function loadPendingInstagramRuns() {
+  try {
+    const raw = window.localStorage.getItem(INSTAGRAM_SYNC_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function savePendingInstagramRuns(runs) {
+  try {
+    if (!runs.length) window.localStorage.removeItem(INSTAGRAM_SYNC_STORAGE_KEY)
+    else window.localStorage.setItem(INSTAGRAM_SYNC_STORAGE_KEY, JSON.stringify(runs))
+  } catch {
+    // ignore localStorage failures
+  }
 }
 
 export default function DataEntryPage() {
@@ -43,11 +63,16 @@ export default function DataEntryPage() {
 
   // Per-post data (for Instagram VTFR/ER)
   const [posts, setPosts] = useState([])
+  const [pendingInstagramRuns, setPendingInstagramRuns] = useState([])
 
   useEffect(() => {
     Promise.all([getModels(), getAccounts()])
       .then(([m, a]) => { setModels(m); setAccounts(a) })
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    setPendingInstagramRuns(loadPendingInstagramRuns())
   }, [])
 
   const filteredAccounts = useMemo(() => {
@@ -263,6 +288,86 @@ export default function DataEntryPage() {
     }
   }
 
+  const pollPendingInstagramRuns = async () => {
+    const pendingRuns = loadPendingInstagramRuns()
+    if (!pendingRuns.length) return
+
+    const nextPending = []
+    const progress = { synced: 0, skipped: 0, errors: [], details: [], pending: 0 }
+
+    for (const run of pendingRuns) {
+      try {
+        const statusRes = await fetch('/.netlify/functions/sync-instagram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status', runId: run.runId }),
+        })
+        const statusText = await statusRes.text()
+        let statusData
+        try { statusData = JSON.parse(statusText) } catch { throw new Error(`Non-JSON response (${statusRes.status}): ${statusText.slice(0, 500)}`) }
+        if (!statusRes.ok) throw new Error(statusData.error || `Sync failed (${statusRes.status})`)
+
+        const runStatus = statusData.status
+        const datasetId = statusData.datasetId || run.datasetId
+
+        if (runStatus === 'SUCCEEDED' || runStatus === 'SUCCEEDED_WITH_ERRORS') {
+          const importRes = await fetch('/.netlify/functions/sync-instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'import', datasetId, handles: run.handles }),
+          })
+          const importText = await importRes.text()
+          let importData
+          try { importData = JSON.parse(importText) } catch { throw new Error(`Non-JSON response (${importRes.status}): ${importText.slice(0, 500)}`) }
+          if (!importRes.ok) throw new Error(importData.error || `Sync failed (${importRes.status})`)
+
+          progress.synced += importData.synced || 0
+          progress.skipped += importData.skipped || 0
+          if (importData.errors?.length) progress.errors.push(...importData.errors)
+          if (importData.details?.length) progress.details.push(...importData.details)
+        } else if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
+          progress.errors.push(`Instagram scrape ${runStatus.toLowerCase()} for ${run.handles.join(', ')}`)
+        } else {
+          nextPending.push({ ...run, status: runStatus, datasetId })
+        }
+      } catch (err) {
+        nextPending.push(run)
+        progress.errors.push(`Instagram status check failed for ${run.handles.join(', ')}: ${err.message}`)
+      }
+    }
+
+    savePendingInstagramRuns(nextPending)
+    setPendingInstagramRuns(nextPending)
+    progress.pending = nextPending.length
+
+    if (progress.synced || progress.errors.length || progress.pending !== pendingRuns.length) {
+      setSyncResults(prev => {
+        const base = prev && prev.source === 'instagram-background'
+          ? prev
+          : { synced: 0, skipped: 0, errors: [], details: [], source: 'instagram-background' }
+
+        return {
+          ...base,
+          synced: (base.synced || 0) + progress.synced,
+          skipped: (base.skipped || 0) + progress.skipped,
+          errors: [...(base.errors || []), ...progress.errors],
+          details: [...(base.details || []), ...progress.details],
+          pending: progress.pending,
+          source: 'instagram-background',
+        }
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (entryMode !== 'api' || !pendingInstagramRuns.length) return
+    pollPendingInstagramRuns()
+    const interval = window.setInterval(() => {
+      pollPendingInstagramRuns()
+    }, 10000)
+    return () => window.clearInterval(interval)
+  }, [entryMode, pendingInstagramRuns.length])
+
   const handleApiSync = async (platform, options = {}) => {
     const { silent = false, manageSyncing = true } = options
     if (manageSyncing) setSyncing(true)
@@ -273,7 +378,7 @@ export default function DataEntryPage() {
           .filter(account => account.platform === 'instagram' && account.status === 'Active')
           .map(account => account.handle)
 
-        const aggregated = { synced: 0, skipped: 0, errors: [], details: [] }
+        const aggregated = { synced: 0, skipped: 0, errors: [], details: [], pending: 0, source: 'instagram-background' }
         const batchSize = 1
 
         for (let i = 0; i < instagramAccounts.length; i += batchSize) {
@@ -289,57 +394,24 @@ export default function DataEntryPage() {
           try { startData = JSON.parse(startText) } catch { throw new Error(`Non-JSON response (${startRes.status}): ${startText.slice(0, 500)}`) }
           if (!startRes.ok) throw new Error(startData.error || `Sync failed (${startRes.status})`)
 
-          let runStatus = startData.status
-          let datasetId = startData.datasetId
-          const runId = startData.runId
-
-          for (let attempt = 0; attempt < 80; attempt++) {
-            if (runStatus === 'SUCCEEDED' || runStatus === 'SUCCEEDED_WITH_ERRORS') break
-            if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
-              throw new Error(`Instagram scrape ${runStatus.toLowerCase()} for ${handles.join(', ')}`)
-            }
-
-            await new Promise(resolve => window.setTimeout(resolve, 3000))
-
-            const statusRes = await fetch('/.netlify/functions/sync-instagram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'status', runId }),
-            })
-            const statusText = await statusRes.text()
-            let statusData
-            try { statusData = JSON.parse(statusText) } catch { throw new Error(`Non-JSON response (${statusRes.status}): ${statusText.slice(0, 500)}`) }
-            if (!statusRes.ok) throw new Error(statusData.error || `Sync failed (${statusRes.status})`)
-            runStatus = statusData.status
-            datasetId = statusData.datasetId || datasetId
-          }
-
-          if (runStatus !== 'SUCCEEDED' && runStatus !== 'SUCCEEDED_WITH_ERRORS') {
-            throw new Error(`Instagram scrape timed out before completion for ${handles.join(', ')}`)
-          }
-
-          const importRes = await fetch('/.netlify/functions/sync-instagram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'import', datasetId, handles }),
-          })
-          const importText = await importRes.text()
-          let importData
-          try { importData = JSON.parse(importText) } catch { throw new Error(`Non-JSON response (${importRes.status}): ${importText.slice(0, 500)}`) }
-          if (!importRes.ok) throw new Error(importData.error || `Sync failed (${importRes.status})`)
-
-          aggregated.synced += importData.synced || 0
-          aggregated.skipped += importData.skipped || 0
-          if (importData.errors?.length) aggregated.errors.push(...importData.errors)
-          if (importData.details?.length) aggregated.details.push(...importData.details)
+          aggregated.pending += 1
+          const pendingRuns = [...loadPendingInstagramRuns(), {
+            runId: startData.runId,
+            datasetId: startData.datasetId,
+            handles,
+            status: startData.status,
+          }]
+          savePendingInstagramRuns(pendingRuns)
+          setPendingInstagramRuns(pendingRuns)
         }
 
+        aggregated.details.push({ action: 'started', views_7d: null })
         if (!silent) setSyncResults(aggregated)
         logAudit({
           action: 'api_sync',
           entity_type: 'platform',
           entity_id: platform,
-          details: `API sync: ${aggregated.synced} accounts updated, ${aggregated.errors?.length || 0} errors`,
+          details: `Instagram background sync started for ${aggregated.pending} account${aggregated.pending !== 1 ? 's' : ''}`,
           user_id: user?.id,
         })
         return aggregated
@@ -597,9 +669,18 @@ export default function DataEntryPage() {
                 {syncResults.action !== 'discover' && (
                   <>
                     <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                      {syncResults.synced > 0 ? `Synced ${syncResults.synced} account${syncResults.synced !== 1 ? 's' : ''}` : 'Sync complete'}
+                      {syncResults.pending > 0 && syncResults.synced === 0
+                        ? `Instagram sync started for ${syncResults.pending} account${syncResults.pending !== 1 ? 's' : ''}`
+                        : syncResults.synced > 0
+                          ? `Synced ${syncResults.synced} account${syncResults.synced !== 1 ? 's' : ''}`
+                          : 'Sync complete'}
                       {syncResults.skipped > 0 && `, ${syncResults.skipped} skipped`}
                     </p>
+                    {syncResults.pending > 0 && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                        Instagram scraping is running in the background. Keep this page open and results will import automatically.
+                      </p>
+                    )}
 
                     {syncResults.details?.length > 0 && (
                       <div style={{ marginTop: '0.75rem' }}>
@@ -607,6 +688,7 @@ export default function DataEntryPage() {
                         <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem' }}>
                           {syncResults.details.map((d, i) => (
                             <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
+                              {d.action === 'started' && syncResults.pending > 0 && `Instagram background jobs queued`}
                               {d.handle && `@${d.handle} — ${d.action}`}
                               {d.followers != null && `, ${d.followers.toLocaleString()} followers`}
                               {d.karma != null && `, ${d.karma.toLocaleString()} karma`}
