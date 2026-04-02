@@ -274,7 +274,7 @@ export default function DataEntryPage() {
           .map(account => account.handle)
 
         const aggregated = { synced: 0, skipped: 0, errors: [], details: [] }
-        const batchSize = 2
+        const batchSize = 1
 
         for (let i = 0; i < instagramAccounts.length; i += batchSize) {
           const handles = instagramAccounts.slice(i, i + batchSize)
@@ -293,13 +293,13 @@ export default function DataEntryPage() {
           let datasetId = startData.datasetId
           const runId = startData.runId
 
-          for (let attempt = 0; attempt < 40; attempt++) {
+          for (let attempt = 0; attempt < 80; attempt++) {
             if (runStatus === 'SUCCEEDED' || runStatus === 'SUCCEEDED_WITH_ERRORS') break
             if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
               throw new Error(`Instagram scrape ${runStatus.toLowerCase()} for ${handles.join(', ')}`)
             }
 
-            await new Promise(resolve => window.setTimeout(resolve, 2500))
+            await new Promise(resolve => window.setTimeout(resolve, 3000))
 
             const statusRes = await fetch('/.netlify/functions/sync-instagram', {
               method: 'POST',
