@@ -71,7 +71,7 @@ export default function PlatformPage() {
       snapshot: snapByAccount[a.id] || null,
       ofTracking: ofByAccount[a.id] || null,
       linkMapping: mappingByAccount[a.id] || null,
-      _followers: snapByAccount[a.id]?.followers || 0,
+      _followers: snapByAccount[a.id]?.followers ?? null,
       _views: getSnapshotViews(snapByAccount[a.id]),
       _clicks: getSnapshotClicks(snapByAccount[a.id]),
       _vtfr: snapByAccount[a.id]?.vtfr_weekly || 0,
@@ -166,7 +166,7 @@ export default function PlatformPage() {
         <button className="btn btn-secondary" onClick={() => {
           const rows = merged.map(a => ({
             handle: a.handle, model: a.model?.name, platform: a.platform,
-            health: a.health, followers: a._followers, views_7d: a._views,
+            health: a.health, followers: a._followers ?? '', views_7d: a._views,
             clicks_7d: a._clicks, follower_growth_pct: trendByAccount[a.id]?.followerGrowthPct?.toFixed(1) || '0.0',
             vtfr: a._vtfr, er: a._er, of_link: a.ofTracking?.tracking_link_name || a.linkMapping?.tracking_link_name || '',
             of_clicks: a._ofClicks, of_subs: a._ofSubs, of_cvr: a._ofCvr.toFixed(1), of_revenue: a._ofRevenue
@@ -285,7 +285,7 @@ export default function PlatformPage() {
                         {a.health}
                       </span>
                     </td>
-                    <td className="numeric font-semibold">{formatNumber(a._followers)}</td>
+                    <td className="numeric font-semibold">{a._followers != null ? formatNumber(a._followers) : '—'}</td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                         <Sparkline data={trend?.series || []} width={92} height={30} />
