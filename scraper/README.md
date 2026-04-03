@@ -19,6 +19,8 @@ It also marks each managed Instagram account in `public.accounts` with `data_sou
 ## Files
 
 - `scrape.py` — main scraper entrypoint
+- `create_session.py` — first-time login / session validation helper
+- `test_connection.py` — dry-run test against Supabase + one Instagram account
 - `requirements.txt` — pinned Python dependencies
 - `.env.example` — environment variable template
 
@@ -55,7 +57,15 @@ cp .env.example .env
 
 ## First-time login / session creation
 
-On the first run, if `IG_SESSION_FILE` does not exist, the script will:
+The easiest way to create or refresh the saved Instagram session is:
+
+```bash
+cd scraper
+source .venv/bin/activate
+python create_session.py
+```
+
+If `IG_SESSION_FILE` does not exist, the helper will:
 - log in with `IG_USERNAME` and `IG_PASSWORD`
 - save the session JSON to `IG_SESSION_FILE`
 
@@ -74,6 +84,29 @@ cd scraper
 source .venv/bin/activate
 python scrape.py
 ```
+
+## Dry-run test before writing data
+
+Before running the full scraper, validate the setup against Supabase and one Instagram target:
+
+```bash
+cd scraper
+source .venv/bin/activate
+python test_connection.py
+```
+
+To test a specific account:
+
+```bash
+python test_connection.py --handle arianaangelsxo
+```
+
+This will:
+- load the session
+- read active Instagram rows from Supabase
+- scrape one target profile
+- print the follower/post metrics it would use
+- perform **no** database writes
 
 ## Output behavior
 
