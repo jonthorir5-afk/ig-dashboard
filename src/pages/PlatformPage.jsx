@@ -170,6 +170,8 @@ export default function PlatformPage() {
   const showInstagramMetrics = selectedPlatform === 'instagram'
   const showTwitterMetrics = selectedPlatform === 'twitter'
   const showRedditMetrics = selectedPlatform === 'reddit'
+  const showFollowerColumn = !showRedditMetrics
+  const showTrendColumn = !showRedditMetrics
 
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
@@ -234,14 +236,18 @@ export default function PlatformPage() {
       {dailyTrend.length > 1 && (
         <div className="glass-panel" style={{ padding: '1.25rem' }}>
           <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
-            {selectedPlatform ? PLATFORM_LABELS[selectedPlatform] : 'All Platforms'} — Views & Followers Over Time
+            {selectedPlatform === 'reddit'
+              ? 'Reddit — Activity Over Time'
+              : `${selectedPlatform ? PLATFORM_LABELS[selectedPlatform] : 'All Platforms'} — Views & Followers Over Time`}
           </h3>
           <TrendChart
             data={dailyTrend}
-            lines={[
-              { key: 'views', label: 'Views', color: COLORS.primary },
-              { key: 'followers', label: 'Followers', color: COLORS.success },
-            ]}
+            lines={showRedditMetrics
+              ? [{ key: 'views', label: 'Activity', color: COLORS.primary }]
+              : [
+                  { key: 'views', label: 'Views', color: COLORS.primary },
+                  { key: 'followers', label: 'Followers', color: COLORS.success },
+                ]}
             height={240}
           />
         </div>
@@ -258,8 +264,8 @@ export default function PlatformPage() {
                 <th>Model</th>
                 {!selectedPlatform && <th>Platform</th>}
                 <th>Health</th>
-                <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>
-                <th style={{ textAlign: 'center' }}>Trend</th>
+                {showFollowerColumn && <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>}
+                {showTrendColumn && <th style={{ textAlign: 'center' }}>Trend</th>}
                 {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
                 {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igLikes')}>Likes 7d <SortIcon k="igLikes" /></th>}
                 {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igComments')}>Comments 7d <SortIcon k="igComments" /></th>}
@@ -319,15 +325,17 @@ export default function PlatformPage() {
                         {a.health}
                       </span>
                     </td>
-                    <td className="numeric font-semibold">{a._followers != null ? formatNumber(a._followers) : '—'}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
-                        <Sparkline data={trend?.series || []} width={92} height={30} />
-                        <span style={{ fontSize: '0.72rem', color: trend?.followerGrowthPct > 0 ? '#10b981' : trend?.followerGrowthPct < 0 ? '#ef4444' : 'var(--text-tertiary)' }}>
-                          {formatChange(trend?.followerGrowthPct || 0)}
-                        </span>
-                      </div>
-                    </td>
+                    {showFollowerColumn && <td className="numeric font-semibold">{a._followers != null ? formatNumber(a._followers) : '—'}</td>}
+                    {showTrendColumn && (
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                          <Sparkline data={trend?.series || []} width={92} height={30} />
+                          <span style={{ fontSize: '0.72rem', color: trend?.followerGrowthPct > 0 ? '#10b981' : trend?.followerGrowthPct < 0 ? '#ef4444' : 'var(--text-tertiary)' }}>
+                            {formatChange(trend?.followerGrowthPct || 0)}
+                          </span>
+                        </div>
+                      </td>
+                    )}
                     {showInstagramMetrics && <td className="numeric font-semibold">{formatNumber(a.snapshot?.ig_views_7d || 0)}</td>}
                     {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_likes_7d || 0)}</td>}
                     {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_comments_7d || 0)}</td>}
@@ -363,6 +371,8 @@ export default function PlatformPage() {
                 <tr>
                   <td
                     colSpan={(selectedPlatform ? 13 : 14)
+                      - (showFollowerColumn ? 0 : 1)
+                      - (showTrendColumn ? 0 : 1)
                       + (showInstagramMetrics ? 4 : 0)
                       + (showTwitterMetrics ? 4 : 0)
                       + (showRedditMetrics ? 6 : 0)
