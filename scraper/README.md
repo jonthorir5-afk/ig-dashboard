@@ -1,0 +1,108 @@
+# Instagram Scraper
+
+This folder contains a standalone Python scraper that replaces the Apify Instagram actor for the dashboard.
+
+It uses:
+- `instagrapi` for authenticated Instagram scraping
+- Supabase service-role access for database writes
+- a local session file so the scraper can reuse an Instagram login between runs
+
+## What it writes
+
+The script reads all active Instagram accounts from `public.accounts` and writes:
+- one row per account into `public.snapshots`
+- up to 10 recent posts per account into `public.posts`
+
+It skips any account that already has a snapshot for today's date.
+It also marks each managed Instagram account in `public.accounts` with `data_source = 'scraper'`.
+
+## Files
+
+- `scrape.py` — main scraper entrypoint
+- `requirements.txt` — pinned Python dependencies
+- `.env.example` — environment variable template
+
+## Setup
+
+1. Create a Python virtual environment:
+
+```bash
+cd scraper
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Create your `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+4. Fill in `.env`:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_KEY`
+- `IG_SESSION_FILE`
+- `IG_USERNAME`
+- `IG_PASSWORD`
+- `PROXY_URL` (optional, leave blank to skip proxy usage)
+
+## First-time login / session creation
+
+On the first run, if `IG_SESSION_FILE` does not exist, the script will:
+- log in with `IG_USERNAME` and `IG_PASSWORD`
+- save the session JSON to `IG_SESSION_FILE`
+
+On later runs, it will load the saved session instead of logging in again.
+
+Example session file setting:
+
+```env
+IG_SESSION_FILE=./session.json
+```
+
+## Run manually
+
+```bash
+cd scraper
+source .venv/bin/activate
+python scrape.py
+```
+
+## Output behavior
+
+The script logs to stdout with timestamps and will report:
+- startup failures
+- per-account success
+- per-account skips when today's snapshot already exists
+- per-account auth/challenge failures
+- per-account DB write failures
+
+## Hourly cron job on a Linux VPS
+
+Open your crontab:
+
+```bash
+crontab -e
+```
+
+Add a job like this:
+
+```cron
+0 * * * * cd /path/to/ig-dashboard/scraper && /path/to/ig-dashboard/scraper/.venv/bin/python scrape.py >> /var/log/ig-scraper.log 2>&1
+```
+
+This runs the scraper at the top of every hour and appends logs to `/var/log/ig-scraper.log`.
+
+## Operational notes
+
+- Use the Supabase **service role** key, not the anon key.
+- A residential proxy is strongly recommended for Instagram scraping.
+- The script adds a random 2–5 second delay between accounts.
+- If Instagram raises `LoginRequired` or `ChallengeRequired`, the script logs the error and skips the affected account instead of crashing the whole run.
