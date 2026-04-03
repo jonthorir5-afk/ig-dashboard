@@ -17,6 +17,7 @@ export default function AccountsPage() {
   const [models, setModels] = useState([])
   const [operators, setOperators] = useState([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [connectingAccountId, setConnectingAccountId] = useState('')
   const [instagramAuthNotice, setInstagramAuthNotice] = useState(null)
   const [accountCreationNotice, setAccountCreationNotice] = useState(null)
@@ -107,25 +108,32 @@ export default function AccountsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const normalizedHandle = form.handle.trim().replace(/^@/, '')
-    const autoAccountUrl = form.account_url?.trim() || buildAccountUrl(form.platform, normalizedHandle)
-    const payload = { ...form, handle: normalizedHandle, account_url: autoAccountUrl }
-    if (!payload.assigned_operator) delete payload.assigned_operator
-    if (editing) {
-      await updateAccount(editing, payload)
-      setAccountCreationNotice(null)
-    } else {
-      const created = await createAccount(payload)
-      setAccountCreationNotice({
-        accountId: created.id,
-        handle: created.handle,
-        platform: created.platform,
-      })
+    setSaving(true)
+    try {
+      const normalizedHandle = form.handle.trim().replace(/^@/, '')
+      const autoAccountUrl = form.account_url?.trim() || buildAccountUrl(form.platform, normalizedHandle)
+      const payload = { ...form, handle: normalizedHandle, account_url: autoAccountUrl }
+      if (!payload.assigned_operator) delete payload.assigned_operator
+      if (editing) {
+        await updateAccount(editing, payload)
+        setAccountCreationNotice(null)
+      } else {
+        const created = await createAccount(payload)
+        setAccountCreationNotice({
+          accountId: created.id,
+          handle: created.handle,
+          platform: created.platform,
+        })
+      }
+      setShowForm(false)
+      setEditing(null)
+      setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
+      load()
+    } catch (err) {
+      alert(`Account save failed: ${err.message}`)
+    } finally {
+      setSaving(false)
     }
-    setShowForm(false)
-    setEditing(null)
-    setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
-    load()
   }
 
   const handleEdit = (acc) => {
@@ -410,7 +418,9 @@ export default function AccountsPage() {
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>{editing ? 'Save' : 'Add Account'}</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={saving}>
+                  {saving ? 'Saving...' : (editing ? 'Save' : 'Add Account')}
+                </button>
               </div>
             </form>
           </div>
