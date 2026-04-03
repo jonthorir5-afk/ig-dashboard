@@ -252,17 +252,15 @@ export default function AccountsPage() {
                               @{a._igConnection.instagram_username}
                             </span>
                           )}
-                          {canManage && (
-                            <button
-                              className="btn btn-secondary"
-                              type="button"
-                              onClick={() => handleConnectInstagram(a)}
-                              disabled={connectingAccountId === a.id}
-                              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
-                            >
-                              {connectingAccountId === a.id ? 'Connecting...' : (a._igConnection ? 'Reconnect' : 'Connect Instagram')}
-                            </button>
-                          )}
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => handleConnectInstagram(a)}
+                            disabled={connectingAccountId === a.id}
+                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
+                          >
+                            {connectingAccountId === a.id ? 'Connecting...' : (a._igConnection ? 'Reconnect' : 'Connect Instagram')}
+                          </button>
                           {a._igConnection?.last_error && (
                             <span style={{ fontSize: '0.7rem', color: 'var(--accent-danger)', maxWidth: '180px' }}>
                               {a._igConnection.last_error}
