@@ -5,8 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 )
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN
-const APIFY_INSTAGRAM_SCRAPER = 'apify~instagram-profile-scraper'
+const META_GRAPH_VERSION = process.env.META_GRAPH_API_VERSION || 'v24.0'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -15,37 +14,16 @@ function json(data, status = 200) {
   })
 }
 
-async function apifyFetchJson(url, options = {}, timeoutMs = 12000) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Apify error ${res.status}: ${text.slice(0, 300)}`)
-    }
-
-    return await res.json()
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error(`Apify request timed out after ${Math.round(timeoutMs / 1000)}s`)
-    }
-    throw err
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 async function parseBody(req) {
   try {
     return await req.json()
   } catch {
-    return {}
+    try {
+      const text = await req.text()
+      return text ? JSON.parse(text) : {}
+    } catch {
+      return {}
+    }
   }
 }
 
@@ -53,346 +31,240 @@ function normalizeHandle(handle) {
   return (handle || '').trim().replace(/^@/, '').toLowerCase()
 }
 
-function parseCompactNumber(value) {
-  if (value == null || value === '') return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-
-  const normalized = String(value).trim().replace(/,/g, '')
-  if (!normalized) return null
-
-  const match = normalized.match(/^(-?\d+(?:\.\d+)?)([kmb])?$/i)
-  if (!match) {
-    const embedded = normalized.replace(/\s+/g, '').match(/(-?\d+(?:\.\d+)?)([kmb])?/i)
-    if (embedded) {
-      const base = Number(embedded[1])
-      if (!Number.isFinite(base)) return null
-
-      const suffix = (embedded[2] || '').toLowerCase()
-      const multiplier =
-        suffix === 'k' ? 1_000 :
-        suffix === 'm' ? 1_000_000 :
-        suffix === 'b' ? 1_000_000_000 :
-        1
-
-      return Math.round(base * multiplier)
-    }
-
-    const parsed = Number(normalized.replace(/[^\d.-]/g, ''))
-    return Number.isFinite(parsed) ? parsed : null
-  }
-
-  const base = Number(match[1])
-  if (!Number.isFinite(base)) return null
-
-  const suffix = (match[2] || '').toLowerCase()
-  const multiplier =
-    suffix === 'k' ? 1_000 :
-    suffix === 'm' ? 1_000_000 :
-    suffix === 'b' ? 1_000_000_000 :
-    1
-
-  return Math.round(base * multiplier)
+function sumMetric(entries, metricName) {
+  return (entries || []).reduce((sum, entry) => {
+    const value = Number(entry?.values?.[0]?.value || 0)
+    return sum + (Number.isFinite(value) ? value : 0)
+  }, 0)
 }
 
-function firstNumber(...values) {
-  for (const value of values) {
-    if (value == null || value === '') continue
-    const parsed = parseCompactNumber(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return null
+function maxMetric(entries, metricName) {
+  return (entries || []).reduce((max, entry) => {
+    const value = Number(entry?.values?.[0]?.value || 0)
+    return Number.isFinite(value) && value > max ? value : max
+  }, 0)
 }
 
-function getFollowerDebugFields(item) {
-  return {
-    status: item.status ?? null,
-    error: item.error ?? null,
-    message: item.message ?? null,
-    inputUrl: item.inputUrl ?? null,
-    url: item.url ?? item.profileUrl ?? null,
-    followersCount: item.followersCount ?? null,
-    followers_count: item.followers_count ?? null,
-    follower_count: item.follower_count ?? null,
-    followers: item.followers ?? null,
-    followersText: item.followersText ?? null,
-    followers_text: item.followers_text ?? null,
-    ownerFollowersCount: item.owner?.followersCount ?? null,
-    ownerFollowers: item.owner?.followers ?? null,
-    edgeFollowedBy: item.edge_followed_by?.count ?? null,
-    keys: Object.keys(item || {}).slice(0, 30),
-  }
+async function metaFetch(path, accessToken, params = {}) {
+  const url = new URL(`https://graph.instagram.com/${META_GRAPH_VERSION}${path}`)
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== '') url.searchParams.set(key, value)
+  })
+  url.searchParams.set('access_token', accessToken)
+
+  const res = await fetch(url)
+  const text = await res.text()
+  let data
+  try { data = JSON.parse(text) } catch { throw new Error(`Meta API returned invalid JSON: ${text.slice(0, 200)}`) }
+  if (!res.ok) throw new Error(data.error?.message || `Meta API ${res.status}`)
+  return data
 }
 
-function handleFromUrl(url) {
-  if (!url) return ''
+async function fetchInstagramProfile(connection) {
+  return metaFetch('/me', connection.access_token, {
+    fields: 'user_id,username,account_type,media_count,followers_count,follows_count',
+  })
+}
+
+async function fetchMediaList(connection) {
+  const data = await metaFetch('/me/media', connection.access_token, {
+    fields: 'id,caption,media_type,timestamp,permalink',
+    limit: '25',
+  })
+  return data.data || []
+}
+
+async function fetchMediaInsights(connection, mediaId) {
   try {
-    const pathname = new URL(url).pathname.split('/').filter(Boolean)
-    return normalizeHandle(pathname[0] || '')
+    const data = await metaFetch(`/${mediaId}/insights`, connection.access_token, {
+      metric: 'views,reach,likes,comments,saved,shares,total_interactions',
+    })
+    return data.data || []
   } catch {
-    const match = String(url).match(/instagram\.com\/([^/?#]+)/i)
-    return normalizeHandle(match?.[1] || '')
+    return []
   }
 }
 
-async function getInstagramAccounts(handles = []) {
-  let query = supabase
-    .from('accounts')
-    .select('id, handle, model_id')
-    .eq('platform', 'instagram')
-    .eq('status', 'Active')
-
-  const normalizedHandles = handles.map(normalizeHandle).filter(Boolean)
-  if (normalizedHandles.length > 0) query = query.in('handle', normalizedHandles)
-
-  return query
+async function fetchAccountInsights(connection) {
+  try {
+    const data = await metaFetch('/me/insights', connection.access_token, {
+      metric: 'reach,profile_views,website_clicks',
+      period: 'day',
+    })
+    return data.data || []
+  } catch {
+    return []
+  }
 }
 
-async function startRun(usernames) {
-  const data = await apifyFetchJson(
-    `https://api.apify.com/v2/acts/${APIFY_INSTAGRAM_SCRAPER}/runs?token=${APIFY_TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        usernames,
-        resultsType: 'details',
-        maxPosts: 0,
-      }),
-    },
-    15000
-  )
-  return data.data || data
-}
+function computeMediaMetrics(mediaItems, insightsByMedia) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
+  let reelsPosted7d = 0
+  let views7d = 0
+  let views30d = 0
+  let topReelViews = 0
 
-async function getRun(runId) {
-  const data = await apifyFetchJson(
-    `https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`,
-    {},
-    8000
-  )
-  return data.data || data
-}
+  for (const media of mediaItems) {
+    const timestamp = media.timestamp ? new Date(media.timestamp) : null
+    const isRecent7d = timestamp && timestamp >= sevenDaysAgo
+    const insights = insightsByMedia[media.id] || []
+    const mediaViews = sumMetric(insights.filter(metric => metric.name === 'views'))
 
-async function getDatasetItems(datasetId) {
-  return apifyFetchJson(
-    `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&clean=true`,
-    {},
-    15000
-  )
-}
-
-async function importItems(accounts, items) {
-  const today = new Date().toISOString().split('T')[0]
-  const results = { synced: 0, skipped: 0, errors: [], details: [], _debug: {} }
-
-  for (const item of items) {
-    const username = normalizeHandle(
-      item.username ||
-      item.userName ||
-      item.ownerUsername ||
-      item.user ||
-      item.handle ||
-      handleFromUrl(item.url || item.profileUrl || item.inputUrl)
-    )
-    const fallbackHandle = accounts.length === 1 ? normalizeHandle(accounts[0].handle) : ''
-    const resolvedHandle = username || fallbackHandle
-    if (!resolvedHandle) continue
-
-    const account = accounts.find(acc => normalizeHandle(acc.handle) === resolvedHandle)
-    if (!account) continue
-
-    let followers = firstNumber(
-      item.followersCount,
-      item.followers_count,
-      item.follower_count,
-      item.followers,
-      item.followersText,
-      item.followers_text,
-      item.owner?.followersCount,
-      item.owner?.followers,
-      item.number_of_members,
-      item.edge_followed_by?.count
-    )
-    let following = firstNumber(
-      item.followsCount,
-      item.followingCount,
-      item.following_count,
-      item.following_count,
-      item.following,
-      item.followingText,
-      item.following_text,
-      item.owner?.followsCount,
-      item.owner?.following,
-      item.edge_follow?.count
-    )
-    const scrapedFollowers = followers
-    const scrapedFollowing = following
-    let followerSource = scrapedFollowers != null ? 'scraper' : 'missing'
-
-    const snapshot = {
-      account_id: account.id,
-      snapshot_date: today,
-      followers,
-      following,
-      ig_views_7d: null,
-      ig_views_30d: null,
-      ig_reels_posted_7d: null,
-      ig_top_reel_views: null,
-      vtfr_weekly: null,
-      engagement_rate_weekly: null,
-      captured_by: 'API-Instagram',
-      notes: `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`,
+    if (media.media_type === 'REEL') {
+      if (isRecent7d) reelsPosted7d += 1
+      topReelViews = Math.max(topReelViews, mediaViews)
     }
 
-    const { data: existing } = await supabase
-      .from('snapshots')
-      .select('id, followers, following')
-      .eq('account_id', account.id)
-      .eq('snapshot_date', today)
-      .limit(1)
-
-    let fallbackSnapshot = null
-    if (snapshot.followers == null || snapshot.following == null) {
-      const { data: previousSnapshots } = await supabase
-        .from('snapshots')
-        .select('followers, following, snapshot_date')
-        .eq('account_id', account.id)
-        .order('snapshot_date', { ascending: false })
-        .limit(5)
-
-      fallbackSnapshot = (previousSnapshots || []).find(row => row.followers != null || row.following != null) || null
-    }
-
-    if (existing?.length) {
-      if (snapshot.followers == null) snapshot.followers = existing[0].followers ?? fallbackSnapshot?.followers ?? null
-      if (snapshot.following == null) snapshot.following = existing[0].following ?? fallbackSnapshot?.following ?? null
-      if (scrapedFollowers == null) {
-        if (existing[0].followers != null || existing[0].following != null) followerSource = 'saved-value'
-        else if (fallbackSnapshot?.followers != null || fallbackSnapshot?.following != null) followerSource = 'previous-snapshot'
-      }
-      snapshot.notes = `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`
-
-      const { error } = await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
-      if (error) {
-        results.errors.push(`@${resolvedHandle}: update failed — ${error.message}`)
-      } else {
-        results.synced++
-        if (scrapedFollowers == null) {
-          results._debug[resolvedHandle] = getFollowerDebugFields(item)
-        }
-        results.details.push({
-          handle: resolvedHandle,
-          action: 'updated',
-          followers: snapshot.followers,
-          views_7d: null,
-          warning: followerSource === 'missing' ? 'followers unavailable from scraper' : undefined,
-          follower_source: followerSource,
-          _debug: scrapedFollowers == null ? getFollowerDebugFields(item) : undefined,
-        })
-      }
-    } else {
-      if (snapshot.followers == null) snapshot.followers = fallbackSnapshot?.followers ?? null
-      if (snapshot.following == null) snapshot.following = fallbackSnapshot?.following ?? null
-      if (scrapedFollowers == null && (fallbackSnapshot?.followers != null || fallbackSnapshot?.following != null)) {
-        followerSource = 'previous-snapshot'
-      }
-      snapshot.notes = `Auto-synced via Apify Instagram profile scraper. Followers source: ${followerSource}.`
-
-      const { error } = await supabase.from('snapshots').insert(snapshot)
-      if (error) {
-        results.errors.push(`@${resolvedHandle}: insert failed — ${error.message}`)
-      } else {
-        results.synced++
-        if (scrapedFollowers == null) {
-          results._debug[resolvedHandle] = getFollowerDebugFields(item)
-        }
-        results.details.push({
-          handle: resolvedHandle,
-          action: 'created',
-          followers: snapshot.followers,
-          views_7d: null,
-          warning: followerSource === 'missing' ? 'followers unavailable from scraper' : undefined,
-          follower_source: followerSource,
-          _debug: scrapedFollowers == null ? getFollowerDebugFields(item) : undefined,
-        })
-      }
-    }
+    views30d += mediaViews
+    if (isRecent7d) views7d += mediaViews
   }
 
-  if (!Object.keys(results._debug).length) delete results._debug
+  return {
+    ig_views_7d: views7d || null,
+    ig_views_30d: views30d || null,
+    ig_reels_posted_7d: reelsPosted7d || null,
+    ig_top_reel_views: topReelViews || null,
+  }
+}
 
-  const syncedHandles = new Set(results.details.map(detail => normalizeHandle(detail.handle)))
-  for (const account of accounts) {
-    const handle = normalizeHandle(account.handle)
-    if (!syncedHandles.has(handle)) {
-      results.skipped++
-      results.errors.push(`@${handle}: not found in Instagram scraper results`)
-      results._debug[handle] = {
-        missingFromDataset: true,
-        attemptedHandle: handle,
-        datasetItemsCount: items.length,
-        datasetHandles: items
-          .map(item => normalizeHandle(
-            item.username ||
-            item.userName ||
-            item.ownerUsername ||
-            item.user ||
-            item.handle ||
-            handleFromUrl(item.url || item.profileUrl || item.inputUrl)
-          ))
-          .filter(Boolean)
-          .slice(0, 20),
-      }
-    }
+async function upsertSnapshot(accountId, snapshot) {
+  const { data: existing, error: existingError } = await supabase
+    .from('snapshots')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('snapshot_date', snapshot.snapshot_date)
+    .limit(1)
+
+  if (existingError) throw existingError
+
+  if (existing?.length) {
+    const { error } = await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
+    if (error) throw error
+    return 'updated'
   }
 
-  return results
+  const { error } = await supabase.from('snapshots').insert(snapshot)
+  if (error) throw error
+  return 'created'
+}
+
+async function markConnectionStatus(connectionId, updates) {
+  await supabase
+    .from('instagram_connections')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', connectionId)
 }
 
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
-  if (!APIFY_TOKEN) return json({ error: 'APIFY_TOKEN not configured' }, 500)
 
   try {
     const body = await parseBody(req)
-    const action = body.action || 'start'
-    const handles = Array.isArray(body.handles) ? body.handles : []
+    const handles = Array.isArray(body.handles) ? body.handles.map(normalizeHandle).filter(Boolean) : []
+    const today = new Date().toISOString().split('T')[0]
 
-    if (action === 'status') {
-      if (!body.runId) return json({ error: 'runId is required' }, 400)
-      const run = await getRun(body.runId)
-      return json({
-        action,
-        runId: run.id,
-        status: run.status,
-        datasetId: run.defaultDatasetId,
-      })
+    let accountQuery = supabase
+      .from('accounts')
+      .select('id, handle, platform, status, model_id, model:models(id, name, display_name)')
+      .eq('platform', 'instagram')
+      .eq('status', 'Active')
+
+    if (handles.length) accountQuery = accountQuery.in('handle', handles)
+
+    const { data: accounts, error: accountsError } = await accountQuery
+    if (accountsError) throw accountsError
+    if (!accounts?.length) return json({ synced: 0, skipped: 0, errors: [], details: [] })
+
+    const accountIds = accounts.map(account => account.id)
+    const { data: connections, error: connectionsError } = await supabase
+      .from('instagram_connections')
+      .select('*')
+      .in('account_id', accountIds)
+
+    if (connectionsError && !String(connectionsError.message || '').includes('instagram_connections')) {
+      throw connectionsError
     }
 
-    if (action === 'import') {
-      if (!body.datasetId) return json({ error: 'datasetId is required' }, 400)
-      const { data: accounts, error } = await getInstagramAccounts(handles)
-      if (error) return json({ error: error.message }, 500)
-      const items = await getDatasetItems(body.datasetId)
-      const results = await importItems(accounts || [], items || [])
-      return json(results)
+    const connectionByAccountId = Object.fromEntries((connections || []).map(connection => [connection.account_id, connection]))
+    const results = { synced: 0, skipped: 0, errors: [], details: [] }
+
+    for (const account of accounts) {
+      const connection = connectionByAccountId[account.id]
+      if (!connection) {
+        results.skipped++
+        results.details.push({
+          handle: normalizeHandle(account.handle),
+          action: 'skipped',
+          warning: 'Instagram account not connected to Meta yet',
+          follower_source: 'missing',
+        })
+        continue
+      }
+
+      try {
+        const profile = await fetchInstagramProfile(connection)
+        const mediaItems = await fetchMediaList(connection)
+        const insightsByMedia = {}
+
+        for (const media of mediaItems) {
+          insightsByMedia[media.id] = await fetchMediaInsights(connection, media.id)
+        }
+
+        const accountInsights = await fetchAccountInsights(connection)
+        const mediaMetrics = computeMediaMetrics(mediaItems, insightsByMedia)
+
+        const snapshot = {
+          account_id: account.id,
+          snapshot_date: today,
+          followers: Number(profile.followers_count || 0) || null,
+          following: Number(profile.follows_count || 0) || null,
+          ig_reach_7d: sumMetric(accountInsights.filter(metric => metric.name === 'reach')) || null,
+          ig_profile_visits_7d: sumMetric(accountInsights.filter(metric => metric.name === 'profile_views')) || null,
+          ig_link_clicks_7d: sumMetric(accountInsights.filter(metric => metric.name === 'website_clicks')) || null,
+          ...mediaMetrics,
+          captured_by: 'API-Instagram-Meta',
+          notes: `Auto-synced via Meta Graph API for @${profile.username || account.handle}.`,
+        }
+
+        const action = await upsertSnapshot(account.id, snapshot)
+        await markConnectionStatus(connection.id, {
+          status: 'connected',
+          last_synced_at: new Date().toISOString(),
+          last_error: null,
+        })
+
+        await supabase
+          .from('accounts')
+          .update({ data_source: 'meta_graph' })
+          .eq('id', account.id)
+
+        results.synced++
+        results.details.push({
+          handle: normalizeHandle(account.handle),
+          action,
+          followers: snapshot.followers,
+          views_7d: snapshot.ig_views_7d,
+          follower_source: 'meta_graph',
+        })
+      } catch (err) {
+        const message = err.message || 'Meta sync failed'
+        results.errors.push(`@${normalizeHandle(account.handle)}: ${message}`)
+        results.details.push({
+          handle: normalizeHandle(account.handle),
+          action: 'failed',
+          warning: message,
+        })
+
+        const nextStatus = /expired|invalid|token|session/i.test(message) ? 'expired' : 'error'
+        await markConnectionStatus(connection.id, {
+          status: nextStatus,
+          last_error: message,
+        })
+      }
     }
 
-    const { data: accounts, error } = await getInstagramAccounts(handles)
-    if (error) return json({ error: error.message }, 500)
-    if (!accounts?.length) return json({ message: 'No active Instagram accounts found', synced: 0 })
-
-    const usernames = accounts.map(account => normalizeHandle(account.handle)).filter(Boolean)
-    const run = await startRun(usernames)
-
-    return json({
-      action: 'start',
-      runId: run.id,
-      datasetId: run.defaultDatasetId,
-      handles: usernames,
-      status: run.status,
-    })
+    return json(results)
   } catch (err) {
-    return json({ synced: 0, errors: [err.message] })
+    return json({ synced: 0, skipped: 0, errors: [err.message || 'Instagram sync failed'], details: [] }, 500)
   }
 }

@@ -57,6 +57,7 @@ function dedupeStrings(values = []) {
 
 function getFollowerSourceLabel(source) {
   if (source === 'scraper') return 'fetched from scraper'
+  if (source === 'meta_graph') return 'fetched from Meta'
   if (source === 'saved-value') return 'used saved value'
   if (source === 'previous-snapshot') return 'used previous snapshot'
   if (source === 'missing') return 'followers unavailable from scraper'
