@@ -88,6 +88,7 @@ create table public.accounts (
   of_username_override text,
   account_type text not null default 'Primary' check (account_type in ('Primary', 'Farm')),
   account_url text,
+  data_source text not null default 'manual' check (data_source in ('manual', 'scraper', 'meta_graph')),
   status text not null default 'Active' check (status in ('Active', 'Paused', 'Suspended', 'Banned')),
   health text not null default 'Clean',
   assigned_operator uuid references public.profiles(id) on delete set null,
@@ -108,6 +109,40 @@ create policy "Accounts are updatable by authenticated users"
 
 create policy "Accounts are deletable by authenticated users"
   on public.accounts for delete to authenticated using (true);
+
+-- ============================================================
+-- INSTAGRAM CONNECTIONS (Meta Graph API)
+-- ============================================================
+create table public.instagram_connections (
+  id uuid primary key default uuid_generate_v4(),
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  meta_app_user_id text,
+  instagram_user_id text not null,
+  instagram_username text,
+  access_token text not null,
+  token_expires_at timestamptz,
+  scopes text[] default '{}',
+  status text not null default 'connected' check (status in ('connected', 'expired', 'revoked', 'error')),
+  last_synced_at timestamptz,
+  last_error text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (account_id)
+);
+
+alter table public.instagram_connections enable row level security;
+
+create policy "Instagram connections are viewable by authenticated users"
+  on public.instagram_connections for select to authenticated using (true);
+
+create policy "Instagram connections are insertable by authenticated users"
+  on public.instagram_connections for insert to authenticated with check (true);
+
+create policy "Instagram connections are updatable by authenticated users"
+  on public.instagram_connections for update to authenticated using (true);
+
+create policy "Instagram connections are deletable by authenticated users"
+  on public.instagram_connections for delete to authenticated using (true);
 
 -- ============================================================
 -- SNAPSHOTS (weekly metrics per account)

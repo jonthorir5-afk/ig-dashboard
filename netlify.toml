@@ -14,6 +14,14 @@
   external_node_modules = ["@supabase/supabase-js"]
   timeout = 120
 
+[functions."instagram-auth-start"]
+  external_node_modules = ["@supabase/supabase-js"]
+  timeout = 60
+
+[functions."instagram-auth-callback"]
+  external_node_modules = ["@supabase/supabase-js"]
+  timeout = 60
+
 [functions."sync-onlyfans"]
   external_node_modules = ["@supabase/supabase-js"]
   timeout = 120
