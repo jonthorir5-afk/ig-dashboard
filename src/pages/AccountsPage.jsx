@@ -19,6 +19,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [connectingAccountId, setConnectingAccountId] = useState('')
   const [instagramAuthNotice, setInstagramAuthNotice] = useState(null)
+  const [accountCreationNotice, setAccountCreationNotice] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [search, setSearch] = useState('')
@@ -106,15 +107,24 @@ export default function AccountsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const payload = { ...form }
+    const normalizedHandle = form.handle.trim().replace(/^@/, '')
+    const autoAccountUrl = form.account_url?.trim() || buildAccountUrl(form.platform, normalizedHandle)
+    const payload = { ...form, handle: normalizedHandle, account_url: autoAccountUrl }
     if (!payload.assigned_operator) delete payload.assigned_operator
     if (editing) {
       await updateAccount(editing, payload)
+      setAccountCreationNotice(null)
     } else {
-      await createAccount(payload)
+      const created = await createAccount(payload)
+      setAccountCreationNotice({
+        accountId: created.id,
+        handle: created.handle,
+        platform: created.platform,
+      })
     }
     setShowForm(false)
     setEditing(null)
+    setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
     load()
   }
 
@@ -155,14 +165,13 @@ export default function AccountsPage() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-secondary" onClick={handleExport}><Download size={16} /> CSV</button>
-          {canManage && (
-            <button className="btn btn-primary" onClick={() => {
-              setShowForm(true); setEditing(null)
-              setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
-            }}>
-              <Plus size={16} /> Add Account
-            </button>
-          )}
+          <button className="btn btn-primary" onClick={() => {
+            setShowForm(true); setEditing(null)
+            setAccountCreationNotice(null)
+            setForm({ model_id: models[0]?.id || '', platform: 'instagram', handle: '', account_url: '', of_username_override: '', account_type: 'Primary', status: 'Active', health: 'Clean', assigned_operator: '' })
+          }}>
+            <Plus size={16} /> Add Account
+          </button>
         </div>
       </div>
 
@@ -186,6 +195,44 @@ export default function AccountsPage() {
           <button className="icon-btn" type="button" onClick={() => setInstagramAuthNotice(null)}>
             <X size={16} />
           </button>
+        </div>
+      )}
+
+      {accountCreationNotice && (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '0.9rem 1rem',
+            marginBottom: '1rem',
+            border: '1px solid rgba(99,102,241,0.35)',
+            background: 'rgba(99,102,241,0.08)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ color: '#c7d2fe', fontSize: '0.9rem' }}>
+            @{accountCreationNotice.handle} was added successfully.
+            {accountCreationNotice.platform === 'instagram' ? ' Connect Instagram now to enable Meta syncing.' : ''}
+          </span>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {accountCreationNotice.platform === 'instagram' && (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => handleConnectInstagram({ id: accountCreationNotice.accountId })}
+                disabled={connectingAccountId === accountCreationNotice.accountId}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+              >
+                {connectingAccountId === accountCreationNotice.accountId ? 'Connecting...' : 'Connect Instagram'}
+              </button>
+            )}
+            <button className="icon-btn" type="button" onClick={() => setAccountCreationNotice(null)}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -383,6 +430,28 @@ const selectStyle = {
   padding: '0.5rem 0.75rem', borderRadius: '8px',
   border: '1px solid var(--border-color)', background: 'var(--bg-tertiary)',
   color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer'
+}
+
+function buildAccountUrl(platform, handle) {
+  const normalized = String(handle || '').trim().replace(/^@/, '')
+  if (!normalized) return ''
+
+  switch (platform) {
+    case 'instagram':
+      return `https://www.instagram.com/${normalized}/`
+    case 'twitter':
+      return `https://twitter.com/${normalized}`
+    case 'reddit':
+      return normalized.startsWith('u/')
+        ? `https://www.reddit.com/user/${normalized.slice(2)}`
+        : `https://www.reddit.com/user/${normalized}`
+    case 'tiktok':
+      return normalized.startsWith('@')
+        ? `https://www.tiktok.com/${normalized}`
+        : `https://www.tiktok.com/@${normalized}`
+    default:
+      return ''
+  }
 }
 
 function formatCompact(value) {
