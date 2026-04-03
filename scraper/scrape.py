@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+
+if sys.version_info < (3, 10):
+    raise RuntimeError(
+        "This scraper requires Python 3.10 or newer because instagrapi 2.3.0 uses modern type syntax. "
+        f"Current version: {sys.version.split()[0]}"
+    )
+
 from instagrapi import Client
 from instagrapi.exceptions import ChallengeRequired, LoginRequired, UserNotFound
 from supabase import Client as SupabaseClient

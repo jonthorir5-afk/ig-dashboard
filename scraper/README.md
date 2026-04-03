@@ -26,11 +26,22 @@ It also marks each managed Instagram account in `public.accounts` with `data_sou
 
 ## Setup
 
+0. Make sure you're using **Python 3.10 or newer**.
+The macOS system Python is often 3.9, which is too old for `instagrapi==2.3.0`.
+
+Check your version:
+
+```bash
+python3 --version
+```
+
+If it shows `3.9.x`, install a newer Python first, then create the virtual environment with that version.
+
 1. Create a Python virtual environment:
 
 ```bash
 cd scraper
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 ```
 

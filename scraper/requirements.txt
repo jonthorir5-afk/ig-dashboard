@@ -1,3 +1,4 @@
+# Requires Python 3.10+
 instagrapi==2.3.0
 supabase==2.15.3
 python-dotenv==1.0.1
