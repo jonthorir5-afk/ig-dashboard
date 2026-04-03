@@ -74,6 +74,21 @@ export default function PlatformPage() {
       _followers: snapByAccount[a.id]?.followers ?? null,
       _views: getSnapshotViews(snapByAccount[a.id]),
       _clicks: getSnapshotClicks(snapByAccount[a.id]),
+      _igLikes: snapByAccount[a.id]?.ig_likes_7d || 0,
+      _igComments: snapByAccount[a.id]?.ig_comments_7d || 0,
+      _igShares: snapByAccount[a.id]?.ig_shares_7d || 0,
+      _igSaves: snapByAccount[a.id]?.ig_saves_7d || 0,
+      _twLikes: snapByAccount[a.id]?.tw_likes_7d || 0,
+      _twRetweets: snapByAccount[a.id]?.tw_retweets_7d || 0,
+      _twReplies: snapByAccount[a.id]?.tw_replies_7d || 0,
+      _twBookmarks: snapByAccount[a.id]?.tw_bookmarks_7d || 0,
+      _rdPosts1d: snapByAccount[a.id]?.rd_posts_1d || 0,
+      _rdPosts7d: snapByAccount[a.id]?.rd_posts_7d || 0,
+      _rdUpvotes1d: snapByAccount[a.id]?.rd_upvotes_1d || 0,
+      _rdUpvotes7d: snapByAccount[a.id]?.rd_upvotes_7d || 0,
+      _rdAvgUpvotes1d: snapByAccount[a.id]?.rd_avg_upvotes_1d || 0,
+      _rdAvgUpvotes7d: snapByAccount[a.id]?.rd_avg_upvotes_7d || 0,
+      _rdReplies7d: snapByAccount[a.id]?.rd_comments_received_7d || 0,
       _vtfr: snapByAccount[a.id]?.vtfr_weekly || 0,
       _er: snapByAccount[a.id]?.engagement_rate_weekly || 0,
       _ofClicks: ofByAccount[a.id]?.clicks || 0,
@@ -153,6 +168,8 @@ export default function PlatformPage() {
   }, [history, selectedPlatform])
 
   const showInstagramMetrics = selectedPlatform === 'instagram'
+  const showTwitterMetrics = selectedPlatform === 'twitter'
+  const showRedditMetrics = selectedPlatform === 'reddit'
 
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
 
@@ -233,7 +250,7 @@ export default function PlatformPage() {
       {/* Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className="accounts-table" style={{ minWidth: '1200px' }}>
+          <table className="accounts-table" style={{ minWidth: showInstagramMetrics || showTwitterMetrics || showRedditMetrics ? '1560px' : '1200px' }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -243,8 +260,25 @@ export default function PlatformPage() {
                 <th>Health</th>
                 <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>
                 <th style={{ textAlign: 'center' }}>Trend</th>
-                <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d <SortIcon k="clicks" /></th>
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igLikes')}>Likes 7d <SortIcon k="igLikes" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igComments')}>Comments 7d <SortIcon k="igComments" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igShares')}>Shares 7d <SortIcon k="igShares" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igSaves')}>Saves 7d <SortIcon k="igSaves" /></th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twLikes')}>Likes 7d <SortIcon k="twLikes" /></th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twRetweets')}>RTs 7d <SortIcon k="twRetweets" /></th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twReplies')}>Replies 7d <SortIcon k="twReplies" /></th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twBookmarks')}>Bookmarks 7d <SortIcon k="twBookmarks" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts1d')}>Posts 1d <SortIcon k="rdPosts1d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts7d')}>Posts 7d <SortIcon k="rdPosts7d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes1d')}>Upvotes 1d <SortIcon k="rdUpvotes1d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes7d')}>Upvotes 7d <SortIcon k="rdUpvotes7d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes1d')}>Avg Upvotes 1d <SortIcon k="rdAvgUpvotes1d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes7d')}>Avg Upvotes 7d <SortIcon k="rdAvgUpvotes7d" /></th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdReplies7d')}>Replies 7d <SortIcon k="rdReplies7d" /></th>}
+                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
+                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d <SortIcon k="clicks" /></th>}
                 <th className="numeric">OF Link</th>
                 <th className="sortable numeric" onClick={() => requestSort('ofClicks')}>OF Clicks <SortIcon k="ofClicks" /></th>
                 <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs <SortIcon k="ofSubs" /></th>
@@ -294,8 +328,25 @@ export default function PlatformPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="numeric font-semibold">{formatNumber(a._views)}</td>
-                    <td className="numeric">{formatNumber(a._clicks)}</td>
+                    {showInstagramMetrics && <td className="numeric font-semibold">{formatNumber(a.snapshot?.ig_views_7d || 0)}</td>}
+                    {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_likes_7d || 0)}</td>}
+                    {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_comments_7d || 0)}</td>}
+                    {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_shares_7d || 0)}</td>}
+                    {showInstagramMetrics && <td className="numeric">{formatNumber(a.snapshot?.ig_saves_7d || 0)}</td>}
+                    {showTwitterMetrics && <td className="numeric font-semibold">{formatNumber(a.snapshot?.tw_views_7d || 0)}</td>}
+                    {showTwitterMetrics && <td className="numeric">{formatNumber(a.snapshot?.tw_likes_7d || 0)}</td>}
+                    {showTwitterMetrics && <td className="numeric">{formatNumber(a.snapshot?.tw_retweets_7d || 0)}</td>}
+                    {showTwitterMetrics && <td className="numeric">{formatNumber(a.snapshot?.tw_replies_7d || 0)}</td>}
+                    {showTwitterMetrics && <td className="numeric">{a.snapshot?.tw_bookmarks_7d != null ? formatNumber(a.snapshot?.tw_bookmarks_7d || 0) : '—'}</td>}
+                    {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_posts_1d || 0)}</td>}
+                    {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_posts_7d || 0)}</td>}
+                    {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_upvotes_1d || 0)}</td>}
+                    {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_upvotes_7d || 0)}</td>}
+                    {showRedditMetrics && <td className="numeric">{a.snapshot?.rd_avg_upvotes_1d != null ? formatNumber(a.snapshot?.rd_avg_upvotes_1d || 0) : '—'}</td>}
+                    {showRedditMetrics && <td className="numeric">{a.snapshot?.rd_avg_upvotes_7d != null ? formatNumber(a.snapshot?.rd_avg_upvotes_7d || 0) : '—'}</td>}
+                    {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_comments_received_7d || 0)}</td>}
+                    {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <td className="numeric font-semibold">{formatNumber(a._views)}</td>}
+                    {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <td className="numeric">{formatNumber(a._clicks)}</td>}
                     <td className="numeric" style={{ textAlign: 'left', fontSize: '0.8rem', color: hasTracking ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
                       {ofStatus}
                     </td>
@@ -311,7 +362,11 @@ export default function PlatformPage() {
               {merged.length === 0 && (
                 <tr>
                   <td
-                    colSpan={(selectedPlatform ? 13 : 14) + (showInstagramMetrics ? 2 : 0)}
+                    colSpan={(selectedPlatform ? 13 : 14)
+                      + (showInstagramMetrics ? 4 : 0)
+                      + (showTwitterMetrics ? 4 : 0)
+                      + (showRedditMetrics ? 6 : 0)
+                      + (showInstagramMetrics ? 2 : 0)}
                     style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}
                   >
                     No accounts found.

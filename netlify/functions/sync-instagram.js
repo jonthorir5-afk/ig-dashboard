@@ -103,12 +103,20 @@ function computeMediaMetrics(mediaItems, insightsByMedia) {
   let views7d = 0
   let views30d = 0
   let topReelViews = 0
+  let likes7d = 0
+  let comments7d = 0
+  let shares7d = 0
+  let saves7d = 0
 
   for (const media of mediaItems) {
     const timestamp = media.timestamp ? new Date(media.timestamp) : null
     const isRecent7d = timestamp && timestamp >= sevenDaysAgo
     const insights = insightsByMedia[media.id] || []
     const mediaViews = sumMetric(insights.filter(metric => metric.name === 'views'))
+    const mediaLikes = sumMetric(insights.filter(metric => metric.name === 'likes'))
+    const mediaComments = sumMetric(insights.filter(metric => metric.name === 'comments'))
+    const mediaShares = sumMetric(insights.filter(metric => metric.name === 'shares'))
+    const mediaSaves = sumMetric(insights.filter(metric => metric.name === 'saved'))
 
     if (media.media_type === 'REEL') {
       if (isRecent7d) reelsPosted7d += 1
@@ -116,7 +124,13 @@ function computeMediaMetrics(mediaItems, insightsByMedia) {
     }
 
     views30d += mediaViews
-    if (isRecent7d) views7d += mediaViews
+    if (isRecent7d) {
+      views7d += mediaViews
+      likes7d += mediaLikes
+      comments7d += mediaComments
+      shares7d += mediaShares
+      saves7d += mediaSaves
+    }
   }
 
   return {
@@ -124,6 +138,10 @@ function computeMediaMetrics(mediaItems, insightsByMedia) {
     ig_views_30d: views30d || null,
     ig_reels_posted_7d: reelsPosted7d || null,
     ig_top_reel_views: topReelViews || null,
+    ig_likes_7d: likes7d || null,
+    ig_comments_7d: comments7d || null,
+    ig_shares_7d: shares7d || null,
+    ig_saves_7d: saves7d || null,
   }
 }
 

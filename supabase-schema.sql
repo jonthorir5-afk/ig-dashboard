@@ -174,6 +174,10 @@ create table public.snapshots (
   ig_reels_posted_7d integer,
   ig_stories_posted_7d integer,
   ig_top_reel_views integer,
+  ig_likes_7d integer,
+  ig_comments_7d integer,
+  ig_shares_7d integer,
+  ig_saves_7d integer,
 
   -- Twitter / X metrics
   tw_impressions_7d integer,
@@ -181,6 +185,7 @@ create table public.snapshots (
   tw_retweets_7d integer,
   tw_likes_7d integer,
   tw_replies_7d integer,
+  tw_bookmarks_7d integer,
   tw_link_clicks_7d integer,
   tw_tweets_posted_7d integer,
   tw_dms_sent_7d integer,
@@ -188,9 +193,14 @@ create table public.snapshots (
 
   -- Reddit metrics
   rd_karma_total integer,
+  rd_posts_1d integer,
   rd_posts_7d integer,
+  rd_upvotes_1d integer,
+  rd_upvotes_7d integer,
+  rd_avg_upvotes_1d integer,
   rd_avg_upvotes_7d integer,
   rd_total_views_7d integer,
+  rd_comments_received_1d integer,
   rd_comments_received_7d integer,
   rd_top_post_upvotes integer,
   rd_link_clicks_7d integer,

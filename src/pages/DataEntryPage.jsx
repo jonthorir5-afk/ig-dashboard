@@ -234,6 +234,10 @@ export default function DataEntryPage() {
           ig_reels_posted_7d: Number(fields.ig_reels_posted_7d) || null,
           ig_stories_posted_7d: Number(fields.ig_stories_posted_7d) || null,
           ig_top_reel_views: Number(fields.ig_top_reel_views) || null,
+          ig_likes_7d: Number(fields.ig_likes_7d) || null,
+          ig_comments_7d: Number(fields.ig_comments_7d) || null,
+          ig_shares_7d: Number(fields.ig_shares_7d) || null,
+          ig_saves_7d: Number(fields.ig_saves_7d) || null,
           vtfr_weekly: weeklyVTFR || null,
           engagement_rate_weekly: weeklyER || null,
         })
@@ -244,6 +248,7 @@ export default function DataEntryPage() {
           tw_retweets_7d: Number(fields.tw_retweets_7d) || null,
           tw_likes_7d: Number(fields.tw_likes_7d) || null,
           tw_replies_7d: Number(fields.tw_replies_7d) || null,
+          tw_bookmarks_7d: Number(fields.tw_bookmarks_7d) || null,
           tw_link_clicks_7d: Number(fields.tw_link_clicks_7d) || null,
           tw_tweets_posted_7d: Number(fields.tw_tweets_posted_7d) || null,
           tw_dms_sent_7d: Number(fields.tw_dms_sent_7d) || null,
@@ -252,9 +257,14 @@ export default function DataEntryPage() {
       } else if (platform === 'reddit') {
         Object.assign(snapshotData, {
           rd_karma_total: Number(fields.rd_karma_total) || null,
+          rd_posts_1d: Number(fields.rd_posts_1d) || null,
           rd_posts_7d: Number(fields.rd_posts_7d) || null,
+          rd_upvotes_1d: Number(fields.rd_upvotes_1d) || null,
+          rd_upvotes_7d: Number(fields.rd_upvotes_7d) || null,
+          rd_avg_upvotes_1d: Number(fields.rd_avg_upvotes_1d) || null,
           rd_avg_upvotes_7d: Number(fields.rd_avg_upvotes_7d) || null,
           rd_total_views_7d: Number(fields.rd_total_views_7d) || null,
+          rd_comments_received_1d: Number(fields.rd_comments_received_1d) || null,
           rd_comments_received_7d: Number(fields.rd_comments_received_7d) || null,
           rd_top_post_upvotes: Number(fields.rd_top_post_upvotes) || null,
           rd_link_clicks_7d: Number(fields.rd_link_clicks_7d) || null,
@@ -857,6 +867,10 @@ export default function DataEntryPage() {
                   <NumField label="Reels Posted (7d)" value={fields.ig_reels_posted_7d} prev={previousSnapshot?.ig_reels_posted_7d} onChange={v => setFields({ ...fields, ig_reels_posted_7d: v })} />
                   <NumField label="Stories Posted (7d)" value={fields.ig_stories_posted_7d} prev={previousSnapshot?.ig_stories_posted_7d} onChange={v => setFields({ ...fields, ig_stories_posted_7d: v })} />
                   <NumField label="Top Reel Views" value={fields.ig_top_reel_views} prev={previousSnapshot?.ig_top_reel_views} onChange={v => setFields({ ...fields, ig_top_reel_views: v })} />
+                  <NumField label="Likes (7d)" value={fields.ig_likes_7d} prev={previousSnapshot?.ig_likes_7d} onChange={v => setFields({ ...fields, ig_likes_7d: v })} />
+                  <NumField label="Comments (7d)" value={fields.ig_comments_7d} prev={previousSnapshot?.ig_comments_7d} onChange={v => setFields({ ...fields, ig_comments_7d: v })} />
+                  <NumField label="Shares (7d)" value={fields.ig_shares_7d} prev={previousSnapshot?.ig_shares_7d} onChange={v => setFields({ ...fields, ig_shares_7d: v })} />
+                  <NumField label="Saves (7d)" value={fields.ig_saves_7d} prev={previousSnapshot?.ig_saves_7d} onChange={v => setFields({ ...fields, ig_saves_7d: v })} />
                 </>
               )}
               {platform === 'twitter' && (
@@ -866,6 +880,7 @@ export default function DataEntryPage() {
                   <NumField label="Retweets (7d)" value={fields.tw_retweets_7d} prev={previousSnapshot?.tw_retweets_7d} onChange={v => setFields({ ...fields, tw_retweets_7d: v })} />
                   <NumField label="Likes (7d)" value={fields.tw_likes_7d} prev={previousSnapshot?.tw_likes_7d} onChange={v => setFields({ ...fields, tw_likes_7d: v })} />
                   <NumField label="Replies (7d)" value={fields.tw_replies_7d} prev={previousSnapshot?.tw_replies_7d} onChange={v => setFields({ ...fields, tw_replies_7d: v })} />
+                  <NumField label="Bookmarks (7d)" value={fields.tw_bookmarks_7d} prev={previousSnapshot?.tw_bookmarks_7d} onChange={v => setFields({ ...fields, tw_bookmarks_7d: v })} />
                   <NumField label="Link Clicks (7d)" value={fields.tw_link_clicks_7d} prev={previousSnapshot?.tw_link_clicks_7d} onChange={v => setFields({ ...fields, tw_link_clicks_7d: v })} />
                   <NumField label="Tweets Posted (7d)" value={fields.tw_tweets_posted_7d} prev={previousSnapshot?.tw_tweets_posted_7d} onChange={v => setFields({ ...fields, tw_tweets_posted_7d: v })} />
                   <NumField label="DMs Sent (7d)" value={fields.tw_dms_sent_7d} prev={previousSnapshot?.tw_dms_sent_7d} onChange={v => setFields({ ...fields, tw_dms_sent_7d: v })} />
@@ -875,9 +890,14 @@ export default function DataEntryPage() {
               {platform === 'reddit' && (
                 <>
                   <NumField label="Karma (Total)" value={fields.rd_karma_total} prev={previousSnapshot?.rd_karma_total} onChange={v => setFields({ ...fields, rd_karma_total: v })} />
+                  <NumField label="Posts (1d)" value={fields.rd_posts_1d} prev={previousSnapshot?.rd_posts_1d} onChange={v => setFields({ ...fields, rd_posts_1d: v })} />
                   <NumField label="Posts (7d)" value={fields.rd_posts_7d} prev={previousSnapshot?.rd_posts_7d} onChange={v => setFields({ ...fields, rd_posts_7d: v })} />
+                  <NumField label="Upvotes (1d)" value={fields.rd_upvotes_1d} prev={previousSnapshot?.rd_upvotes_1d} onChange={v => setFields({ ...fields, rd_upvotes_1d: v })} />
+                  <NumField label="Upvotes (7d)" value={fields.rd_upvotes_7d} prev={previousSnapshot?.rd_upvotes_7d} onChange={v => setFields({ ...fields, rd_upvotes_7d: v })} />
+                  <NumField label="Avg Upvotes (1d)" value={fields.rd_avg_upvotes_1d} prev={previousSnapshot?.rd_avg_upvotes_1d} onChange={v => setFields({ ...fields, rd_avg_upvotes_1d: v })} />
                   <NumField label="Avg Upvotes (7d)" value={fields.rd_avg_upvotes_7d} prev={previousSnapshot?.rd_avg_upvotes_7d} onChange={v => setFields({ ...fields, rd_avg_upvotes_7d: v })} />
                   <NumField label="Total Views (7d)" value={fields.rd_total_views_7d} prev={previousSnapshot?.rd_total_views_7d} onChange={v => setFields({ ...fields, rd_total_views_7d: v })} />
+                  <NumField label="Replies (1d)" value={fields.rd_comments_received_1d} prev={previousSnapshot?.rd_comments_received_1d} onChange={v => setFields({ ...fields, rd_comments_received_1d: v })} />
                   <NumField label="Comments Received (7d)" value={fields.rd_comments_received_7d} prev={previousSnapshot?.rd_comments_received_7d} onChange={v => setFields({ ...fields, rd_comments_received_7d: v })} />
                   <NumField label="Top Post Upvotes" value={fields.rd_top_post_upvotes} prev={previousSnapshot?.rd_top_post_upvotes} onChange={v => setFields({ ...fields, rd_top_post_upvotes: v })} />
                   <NumField label="Link Clicks (7d)" value={fields.rd_link_clicks_7d} prev={previousSnapshot?.rd_link_clicks_7d} onChange={v => setFields({ ...fields, rd_link_clicks_7d: v })} />
