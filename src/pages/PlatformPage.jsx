@@ -24,6 +24,13 @@ function getAccountUrl(account) {
   }
 }
 
+function getDisplayHandle(account) {
+  if (account.platform === 'reddit') {
+    return String(account.handle || '').replace(/^u\//i, '')
+  }
+  return account.handle
+}
+
 function formatChange(value) {
   if (!Number.isFinite(value) || value === 0) return '0%'
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
@@ -301,6 +308,7 @@ export default function PlatformPage() {
                 const hasMapping = Boolean(a.linkMapping)
                 const hasTracking = Boolean(a.ofTracking)
                 const accountUrl = getAccountUrl(a)
+                const displayHandle = getDisplayHandle(a)
                 const ofStatus = hasTracking
                   ? (a.ofTracking?.tracking_link_name || 'Mapped')
                   : hasMapping
@@ -312,10 +320,10 @@ export default function PlatformPage() {
                     <td>
                       {accountUrl ? (
                         <a href={accountUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-                          @{a.handle}
+                          @{displayHandle}
                         </a>
                       ) : (
-                        <strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong>
+                        <strong style={{ color: 'var(--text-primary)' }}>@{displayHandle}</strong>
                       )}
                     </td>
                     <td>{a.model?.name || '—'}</td>
