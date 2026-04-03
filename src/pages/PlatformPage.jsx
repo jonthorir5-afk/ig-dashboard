@@ -3,27 +3,11 @@ import { useParams } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
-import { getDisplayHandle } from '../lib/accountDisplay'
+import { getDisplayHandle, getAccountProfileUrl } from '../lib/accountDisplay'
 import Sparkline from '../components/charts/Sparkline'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
 const PLATFORM_LABELS = { instagram: 'Instagram', twitter: 'Twitter / X', reddit: 'Reddit', tiktok: 'TikTok' }
-
-function getAccountUrl(account) {
-  if (account.account_url) return account.account_url
-  switch (account.platform) {
-    case 'instagram':
-      return `https://instagram.com/${account.handle}`
-    case 'twitter':
-      return `https://x.com/${account.handle}`
-    case 'reddit':
-      return `https://reddit.com/user/${account.handle}`
-    case 'tiktok':
-      return `https://tiktok.com/@${account.handle}`
-    default:
-      return null
-  }
-}
 
 function formatChange(value) {
   if (!Number.isFinite(value) || value === 0) return '0%'
@@ -301,7 +285,7 @@ export default function PlatformPage() {
                 const trend = trendByAccount[a.id]
                 const hasMapping = Boolean(a.linkMapping)
                 const hasTracking = Boolean(a.ofTracking)
-                const accountUrl = getAccountUrl(a)
+                const accountUrl = getAccountProfileUrl(a)
                 const displayHandle = getDisplayHandle(a)
                 const ofStatus = hasTracking
                   ? (a.ofTracking?.tracking_link_name || 'Mapped')

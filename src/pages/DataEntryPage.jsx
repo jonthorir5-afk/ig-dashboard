@@ -4,7 +4,7 @@ import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots, getL
 import { useAuth } from '../contexts/AuthContext'
 import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGrade } from '../lib/metrics'
 import { logAudit } from '../lib/automation'
-import { getDisplayHandle } from '../lib/accountDisplay'
+import { getDisplayHandle, getAccountProfileUrl } from '../lib/accountDisplay'
 import CSVImport from '../components/CSVImport'
 
 const INSTAGRAM_SYNC_STORAGE_KEY = 'ig-dashboard-instagram-sync-runs'
@@ -586,10 +586,7 @@ export default function DataEntryPage() {
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
                         {acc.platform} • {acc.model?.name || 'Unknown Model'}
                       </span>
-                      {acc.platform === 'twitter' && <a href={`https://twitter.com/${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'reddit' && <a href={`https://reddit.com/user/${acc.handle.replace('u/', '')}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'instagram' && <a href={`https://instagram.com/${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
-                      {acc.platform === 'tiktok' && <a href={`https://tiktok.com/@${acc.handle}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
+                      {getAccountProfileUrl(acc) && <a href={getAccountProfileUrl(acc)} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none', marginTop: '2px' }}>View Profile ↗</a>}
                     </div>
                     <div style={{ flex: 2 }}>
                       <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>OF Tracking Link</label>
