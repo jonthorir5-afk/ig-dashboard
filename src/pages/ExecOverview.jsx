@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download, BarChart3 } from 'lucide-react'
 import { getExecOverview, getAllSnapshotHistory, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
+import { getDisplayHandle } from '../lib/accountDisplay'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 import BarChartComponent from '../components/charts/BarChart'
 
@@ -514,7 +515,7 @@ export default function ExecOverview() {
             <tbody>
               {stats.topOFDrivers.length > 0 ? stats.topOFDrivers.map(driver => (
                 <tr key={`${driver.handle}-${driver.linkName}`}>
-                  <td><strong style={{ color: 'var(--text-primary)' }}>@{driver.handle}</strong></td>
+                  <td><strong style={{ color: 'var(--text-primary)' }}>@{getDisplayHandle(driver.handle, driver.platform)}</strong></td>
                   <td>{driver.model}</td>
                   <td style={{ textTransform: 'capitalize' }}>{driver.platform}</td>
                   <td style={{ fontSize: '0.8rem' }}>{driver.linkName || '—'}</td>
@@ -572,7 +573,7 @@ export default function ExecOverview() {
             return (
               <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
                 <div>
-                  <span style={{ color: 'var(--text-primary)', fontSize: '0.875rem' }}>@{a.handle}</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.875rem' }}>@{getDisplayHandle(a)}</span>
                   <span style={{ marginLeft: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem', textTransform: 'capitalize' }}>{a.platform}</span>
                   {a.account_type && a.account_type !== 'Primary' && <span style={{ marginLeft: '0.3rem', fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>({a.account_type})</span>}
                 </div>
@@ -597,7 +598,7 @@ export default function ExecOverview() {
             {stats.missingData.length} active account(s) have no snapshot data in the last 7 days.
           </p>
           <p style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-            {stats.missingData.slice(0, 5).map(a => `@${a.handle}`).join(', ')}
+            {stats.missingData.slice(0, 5).map(a => `@${getDisplayHandle(a)}`).join(', ')}
             {stats.missingData.length > 5 && ` and ${stats.missingData.length - 5} more`}
           </p>
         </div>

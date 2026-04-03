@@ -3,6 +3,7 @@ import { Plus, Search, Filter, X, Download, Edit2, Trash2 } from 'lucide-react'
 import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount, getLatestOFTracking, getInstagramConnections, startInstagramAuth } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { healthColor, exportToCSV } from '../lib/metrics'
+import { getDisplayHandle } from '../lib/accountDisplay'
 
 const PLATFORMS = ['instagram', 'twitter', 'reddit', 'tiktok']
 const ACCOUNT_TYPES = ['Primary', 'Secondary', 'Backup', 'Farm']
@@ -222,7 +223,7 @@ export default function AccountsPage() {
           }}
         >
           <span style={{ color: '#c7d2fe', fontSize: '0.9rem' }}>
-            @{accountCreationNotice.handle} was added successfully.
+            @{getDisplayHandle(accountCreationNotice.handle, accountCreationNotice.platform)} was added successfully.
             {accountCreationNotice.platform === 'instagram' ? ' Connect Instagram now to enable Meta syncing.' : ''}
           </span>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -292,7 +293,7 @@ export default function AccountsPage() {
                 const igBadge = getInstagramConnectionBadge(a)
                 return (
                   <tr key={a.id}>
-                    <td><strong style={{ color: 'var(--text-primary)' }}>@{a.handle}</strong></td>
+                    <td><strong style={{ color: 'var(--text-primary)' }}>@{getDisplayHandle(a)}</strong></td>
                     <td style={{ textTransform: 'capitalize' }}>{a.platform === 'twitter' ? 'Twitter / X' : a.platform}</td>
                     <td>{a.model?.name || '—'}</td>
                     <td>{a.account_type}</td>

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Globe } from 'lucide-react'
 import { getModel, getAccounts, getSnapshotHistory, getOFTracking } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade } from '../lib/metrics'
+import { getDisplayHandle } from '../lib/accountDisplay'
 import { TrendChart, AreaTrendChart, COLORS } from '../components/charts/TrendChart'
 import Sparkline from '../components/charts/Sparkline'
 import HeatmapGrid, { vtfrColorScale, viewsColorScale } from '../components/charts/HeatmapGrid'
@@ -273,7 +274,7 @@ export default function ModelDetailPage() {
             <tbody>
               {ofAccountRanking.map(({ account, of, clicks, subscribers, cvr, revenue, shareOfSubs }) => (
                 <tr key={account.id}>
-                  <td><strong style={{ color: 'var(--text-primary)' }}>@{account.handle}</strong></td>
+                  <td><strong style={{ color: 'var(--text-primary)' }}>@{getDisplayHandle(account)}</strong></td>
                   <td style={{ textTransform: 'capitalize' }}>{account.platform}</td>
                   <td style={{ fontSize: '0.8rem', color: of ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{of?.tracking_link_name || '—'}</td>
                   <td className="numeric">{formatNumber(clicks)}</td>
@@ -335,7 +336,7 @@ export default function ModelDetailPage() {
                 const hc = healthColor(account.health)
                 return (
                   <tr key={account.id}>
-                    <td style={{ fontWeight: 600 }}>@{account.handle}</td>
+                    <td style={{ fontWeight: 600 }}>@{getDisplayHandle(account)}</td>
                     <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{account.account_type}</td>
                     <td style={{ textAlign: 'right' }}>{snap ? formatNumber(snap.followers || 0) : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{snap ? formatNumber(getSnapshotViews(snap)) : '—'}</td>
@@ -398,7 +399,7 @@ export default function ModelDetailPage() {
             <div key={account.id} className="glass-panel" style={{ padding: '1.25rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                 <div>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>@{account.handle}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>@{getDisplayHandle(account)}</span>
                   <span style={{ marginLeft: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem', textTransform: 'capitalize' }}>{account.platform}</span>
                   {account.account_type && <span style={{ marginLeft: '0.4rem', padding: '0.1rem 0.4rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 600, background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>{account.account_type}</span>}
                 </div>

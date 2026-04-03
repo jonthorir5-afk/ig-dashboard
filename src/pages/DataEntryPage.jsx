@@ -4,6 +4,7 @@ import { getModels, getAccounts, createSnapshot, createPosts, getSnapshots, getL
 import { useAuth } from '../contexts/AuthContext'
 import { calcPostVTFR, calcPostER, calcWeeklyVTFR, calcWeeklyER, vtfrGrade, erGrade } from '../lib/metrics'
 import { logAudit } from '../lib/automation'
+import { getDisplayHandle } from '../lib/accountDisplay'
 import CSVImport from '../components/CSVImport'
 
 const INSTAGRAM_SYNC_STORAGE_KEY = 'ig-dashboard-instagram-sync-runs'
@@ -312,7 +313,7 @@ export default function DataEntryPage() {
         action: 'create_snapshot',
         entity_type: 'snapshot',
         entity_id: selectedAccount,
-        details: `Manual snapshot for @${currentAccount?.handle} on ${snapshotDate}`,
+        details: `Manual snapshot for @${getDisplayHandle(currentAccount)} on ${snapshotDate}`,
         user_id: user?.id,
       })
     } catch (err) {
@@ -581,7 +582,7 @@ export default function DataEntryPage() {
                 return (
                   <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>@{acc.handle}</strong>
+                      <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>@{getDisplayHandle(acc)}</strong>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
                         {acc.platform} • {acc.model?.name || 'Unknown Model'}
                       </span>
@@ -813,7 +814,7 @@ export default function DataEntryPage() {
           <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)} style={inputStyle}>
             <option value="">Select an account</option>
             {filteredAccounts.map(a => (
-              <option key={a.id} value={a.id}>@{a.handle} ({a.platform}{a.account_type ? ` · ${a.account_type}` : ''}){a.model?.name ? ` — ${a.model.name}` : ''}</option>
+              <option key={a.id} value={a.id}>@{getDisplayHandle(a)} ({a.platform}{a.account_type ? ` · ${a.account_type}` : ''}){a.model?.name ? ` — ${a.model.name}` : ''}</option>
             ))}
           </select>
         </div>

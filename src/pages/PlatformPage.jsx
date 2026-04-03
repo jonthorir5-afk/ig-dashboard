@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
+import { getDisplayHandle } from '../lib/accountDisplay'
 import Sparkline from '../components/charts/Sparkline'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
@@ -22,13 +23,6 @@ function getAccountUrl(account) {
     default:
       return null
   }
-}
-
-function getDisplayHandle(account) {
-  if (account.platform === 'reddit') {
-    return String(account.handle || '').replace(/^u\//i, '')
-  }
-  return account.handle
 }
 
 function formatChange(value) {
