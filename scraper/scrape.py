@@ -181,6 +181,7 @@ def insert_snapshot(
     snapshot_date: str,
     followers: int,
     following: int,
+    ig_views_7d: int,
     ig_likes_7d: int,
     ig_comments_7d: int,
 ) -> str:
@@ -192,6 +193,7 @@ def insert_snapshot(
         "followers": followers,
         "following": following,
         "captured_by": "instagrapi",
+        "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
         "engagement_rate_weekly": engagement_rate,
@@ -207,6 +209,7 @@ def update_snapshot(
     snapshot_id: str,
     followers: int,
     following: int,
+    ig_views_7d: int,
     ig_likes_7d: int,
     ig_comments_7d: int,
 ) -> None:
@@ -216,6 +219,7 @@ def update_snapshot(
         "followers": followers,
         "following": following,
         "captured_by": "instagrapi",
+        "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
         "engagement_rate_weekly": engagement_rate,
@@ -285,6 +289,7 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
     recent_posts = posts[:7]
     followers = int(getattr(user, "follower_count", 0) or 0)
     following = int(getattr(user, "following_count", 0) or 0)
+    ig_views_7d = sum(post.views for post in recent_posts if post.views > 0)
     ig_likes_7d = sum(post.likes for post in recent_posts)
     ig_comments_7d = sum(post.comments for post in recent_posts)
 
@@ -296,6 +301,7 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
                 snapshot_id=snapshot_id,
                 followers=followers,
                 following=following,
+                ig_views_7d=ig_views_7d,
                 ig_likes_7d=ig_likes_7d,
                 ig_comments_7d=ig_comments_7d,
             )
@@ -306,17 +312,19 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
                 snapshot_date=snapshot_date,
                 followers=followers,
                 following=following,
+                ig_views_7d=ig_views_7d,
                 ig_likes_7d=ig_likes_7d,
                 ig_comments_7d=ig_comments_7d,
             )
         if post_count == 0:
             insert_posts(supabase, account_id, snapshot_id, posts, account.get("platform", "instagram"))
         logger.info(
-            "[%s] success | followers=%s following=%s posts=%s likes_7=%s comments_7=%s",
+            "[%s] success | followers=%s following=%s posts=%s views_7=%s likes_7=%s comments_7=%s",
             handle,
             followers,
             following,
             len(posts),
+            ig_views_7d,
             ig_likes_7d,
             ig_comments_7d,
         )
