@@ -202,6 +202,27 @@ def insert_snapshot(
     return response.data[0]["id"]
 
 
+def update_snapshot(
+    supabase: SupabaseClient,
+    snapshot_id: str,
+    followers: int,
+    following: int,
+    ig_likes_7d: int,
+    ig_comments_7d: int,
+) -> None:
+    engagement_rate = round(((ig_likes_7d + ig_comments_7d) / followers) * 100, 2) if followers > 0 else 0.0
+
+    payload = {
+        "followers": followers,
+        "following": following,
+        "captured_by": "instagrapi",
+        "ig_likes_7d": ig_likes_7d,
+        "ig_comments_7d": ig_comments_7d,
+        "engagement_rate_weekly": engagement_rate,
+    }
+    supabase.table("snapshots").update(payload).eq("id", snapshot_id).execute()
+
+
 def insert_posts(
     supabase: SupabaseClient,
     account_id: str,
@@ -239,20 +260,14 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
         logger.exception("[%s] failed to mark account data_source as scraper: %s", handle, exc)
 
     existing_snapshot = get_snapshot_for_date(supabase, account_id, snapshot_date)
+    post_count = 0
     if existing_snapshot:
         post_count = get_post_count_for_snapshot(supabase, existing_snapshot["id"])
-        if post_count > 0:
-            logger.info(
-                "[%s] skipping, snapshot already exists for %s and already has %s post row(s)",
-                handle,
-                snapshot_date,
-                post_count,
-            )
-            return
         logger.info(
-            "[%s] snapshot already exists for %s but has no post rows yet; backfilling posts",
+            "[%s] snapshot already exists for %s; refreshing snapshot fields%s",
             handle,
             snapshot_date,
+            " and backfilling posts" if post_count == 0 else "",
         )
 
     try:
@@ -276,6 +291,14 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
     try:
         if existing_snapshot:
             snapshot_id = existing_snapshot["id"]
+            update_snapshot(
+                supabase=supabase,
+                snapshot_id=snapshot_id,
+                followers=followers,
+                following=following,
+                ig_likes_7d=ig_likes_7d,
+                ig_comments_7d=ig_comments_7d,
+            )
         else:
             snapshot_id = insert_snapshot(
                 supabase=supabase,
@@ -286,7 +309,8 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
                 ig_likes_7d=ig_likes_7d,
                 ig_comments_7d=ig_comments_7d,
             )
-        insert_posts(supabase, account_id, snapshot_id, posts, account.get("platform", "instagram"))
+        if post_count == 0:
+            insert_posts(supabase, account_id, snapshot_id, posts, account.get("platform", "instagram"))
         logger.info(
             "[%s] success | followers=%s following=%s posts=%s likes_7=%s comments_7=%s",
             handle,
