@@ -202,7 +202,13 @@ def insert_snapshot(
     return response.data[0]["id"]
 
 
-def insert_posts(supabase: SupabaseClient, account_id: str, snapshot_id: str, posts: list[ScrapedPost]) -> None:
+def insert_posts(
+    supabase: SupabaseClient,
+    account_id: str,
+    snapshot_id: str,
+    posts: list[ScrapedPost],
+    platform: str = "instagram",
+) -> None:
     if not posts:
         return
 
@@ -212,6 +218,7 @@ def insert_posts(supabase: SupabaseClient, account_id: str, snapshot_id: str, po
             {
                 "account_id": account_id,
                 "snapshot_id": snapshot_id,
+                "platform": platform,
                 "post_index": index,
                 "post_url": f"https://www.instagram.com/p/{post.shortcode}/",
                 "views": post.views,
@@ -279,7 +286,7 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
                 ig_likes_7d=ig_likes_7d,
                 ig_comments_7d=ig_comments_7d,
             )
-        insert_posts(supabase, account_id, snapshot_id, posts)
+        insert_posts(supabase, account_id, snapshot_id, posts, account.get("platform", "instagram"))
         logger.info(
             "[%s] success | followers=%s following=%s posts=%s likes_7=%s comments_7=%s",
             handle,
