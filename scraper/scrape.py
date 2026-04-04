@@ -109,7 +109,7 @@ def get_active_instagram_accounts(supabase: SupabaseClient) -> list[dict[str, An
     return response.data or []
 
 
-def snapshot_exists(supabase: SupabaseClient, account_id: str, snapshot_date: str) -> bool:
+def get_snapshot_for_date(supabase: SupabaseClient, account_id: str, snapshot_date: str) -> dict[str, Any] | None:
     response = (
         supabase.table("snapshots")
         .select("id")
@@ -118,7 +118,19 @@ def snapshot_exists(supabase: SupabaseClient, account_id: str, snapshot_date: st
         .limit(1)
         .execute()
     )
-    return bool(response.data)
+    data = response.data or []
+    return data[0] if data else None
+
+
+def get_post_count_for_snapshot(supabase: SupabaseClient, snapshot_id: str) -> int:
+    response = (
+        supabase.table("posts")
+        .select("id", count="exact")
+        .eq("snapshot_id", snapshot_id)
+        .limit(1)
+        .execute()
+    )
+    return int(response.count or 0)
 
 
 def update_account_source(supabase: SupabaseClient, account_id: str) -> None:
@@ -219,9 +231,22 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
     except Exception as exc:  # noqa: BLE001
         logger.exception("[%s] failed to mark account data_source as scraper: %s", handle, exc)
 
-    if snapshot_exists(supabase, account_id, snapshot_date):
-        logger.info("[%s] skipping, snapshot already exists for %s", handle, snapshot_date)
-        return
+    existing_snapshot = get_snapshot_for_date(supabase, account_id, snapshot_date)
+    if existing_snapshot:
+        post_count = get_post_count_for_snapshot(supabase, existing_snapshot["id"])
+        if post_count > 0:
+            logger.info(
+                "[%s] skipping, snapshot already exists for %s and already has %s post row(s)",
+                handle,
+                snapshot_date,
+                post_count,
+            )
+            return
+        logger.info(
+            "[%s] snapshot already exists for %s but has no post rows yet; backfilling posts",
+            handle,
+            snapshot_date,
+        )
 
     try:
         user, posts = scrape_profile(client, handle)
@@ -242,15 +267,18 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
     ig_comments_7d = sum(post.comments for post in recent_posts)
 
     try:
-        snapshot_id = insert_snapshot(
-            supabase=supabase,
-            account_id=account_id,
-            snapshot_date=snapshot_date,
-            followers=followers,
-            following=following,
-            ig_likes_7d=ig_likes_7d,
-            ig_comments_7d=ig_comments_7d,
-        )
+        if existing_snapshot:
+            snapshot_id = existing_snapshot["id"]
+        else:
+            snapshot_id = insert_snapshot(
+                supabase=supabase,
+                account_id=account_id,
+                snapshot_date=snapshot_date,
+                followers=followers,
+                following=following,
+                ig_likes_7d=ig_likes_7d,
+                ig_comments_7d=ig_comments_7d,
+            )
         insert_posts(supabase, account_id, snapshot_id, posts)
         logger.info(
             "[%s] success | followers=%s following=%s posts=%s likes_7=%s comments_7=%s",
