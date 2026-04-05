@@ -143,43 +143,65 @@ def extract_media_items(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
-def fetch_media_payload(session: requests.Session, normalized_handle: str, user_id: str) -> Any:
+def fetch_endpoint_payload(session: requests.Session, normalized_handle: str, path: str, params: dict[str, Any], allow_404: bool = False) -> Any:
+    try:
+        status_code, payload = hikerapi_get_optional(session, path, params)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[%s] HikerAPI %s failed: %s", normalized_handle, path, exc)
+        return []
+
+    if status_code == 404:
+        if allow_404:
+            logger.warning("[%s] HikerAPI %s returned 404; continuing without it", normalized_handle, path)
+            return []
+        logger.warning(
+            "[%s] HikerAPI %s returned 404 | body=%s",
+            normalized_handle,
+            path,
+            payload,
+        )
+        return []
+
+    body_preview = payload.get("body_preview", "") if isinstance(payload, dict) else ""
+    actual_payload = payload.get("payload") if isinstance(payload, dict) and "payload" in payload else payload
+    logger.info(
+        "[%s] HikerAPI %s response status=%s body=%s",
+        normalized_handle,
+        path,
+        status_code,
+        body_preview,
+    )
+    return actual_payload
+
+
+def fetch_media_payload(session: requests.Session, normalized_handle: str, user_id: str) -> list[dict[str, Any]]:
     attempts = [
         ("/v1/user/medias", {"user_id": str(user_id), "amount": 12}),
         ("/v2/user/medias", {"user_id": str(user_id), "amount": 12}),
     ]
 
     for path, params in attempts:
-        try:
-            status_code, payload = hikerapi_get_optional(session, path, params)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[%s] HikerAPI %s failed: %s", normalized_handle, path, exc)
-            continue
-
-        if status_code == 404:
-            logger.warning(
-                "[%s] HikerAPI %s returned 404 | body=%s",
-                normalized_handle,
-                path,
-                payload,
-            )
-            continue
-
-        body_preview = payload.get("body_preview", "") if isinstance(payload, dict) else ""
-        actual_payload = payload.get("payload") if isinstance(payload, dict) and "payload" in payload else payload
-        logger.info(
-            "[%s] HikerAPI %s response status=%s body=%s",
-            normalized_handle,
-            path,
-            status_code,
-            body_preview,
-        )
+        actual_payload = fetch_endpoint_payload(session, normalized_handle, path, params)
         media_items = extract_media_items(actual_payload)
         if media_items:
-            return actual_payload
+            return media_items
 
     logger.warning("[%s] HikerAPI media endpoints returned no posts", normalized_handle)
     return []
+
+
+def fetch_clips_payload(session: requests.Session, normalized_handle: str, user_id: str) -> list[dict[str, Any]]:
+    payload = fetch_endpoint_payload(
+        session,
+        normalized_handle,
+        "/v1/user/clips/by/user_id",
+        {"user_id": str(user_id), "amount": 12},
+        allow_404=True,
+    )
+    clips = extract_media_items(payload)
+    if not clips:
+        logger.warning("[%s] HikerAPI clips endpoint returned no reels", normalized_handle)
+    return clips
 
 
 def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, Any], list[ScrapedPost]]:
@@ -189,11 +211,21 @@ def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, An
     if not user_id:
         raise RuntimeError(f"HikerAPI profile response missing user_id for {normalized_handle}")
 
-    medias_payload = fetch_media_payload(session, normalized_handle, str(user_id))
-    media_items = extract_media_items(medias_payload)
+    media_items = fetch_media_payload(session, normalized_handle, str(user_id))
+    clip_items = fetch_clips_payload(session, normalized_handle, str(user_id))
+
+    combined_by_pk: dict[str, dict[str, Any]] = {}
+    for media in [*media_items, *clip_items]:
+        pk = media.get("pk") or media.get("id")
+        if not pk:
+            continue
+        combined_by_pk[str(pk)] = media
+
+    merged_items = list(combined_by_pk.values())
+    merged_items.sort(key=lambda media: str(media.get("taken_at") or media.get("taken_at_ts") or ""), reverse=True)
 
     posts: list[ScrapedPost] = []
-    for media in media_items:
+    for media in merged_items[:12]:
         shortcode = media.get("code")
         if not shortcode:
             continue
