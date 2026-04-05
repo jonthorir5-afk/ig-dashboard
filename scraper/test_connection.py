@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
 from scrape import (
     ENV_PATH,
-    build_instagram_client,
+    build_hikerapi_session,
     build_supabase,
     get_active_instagram_accounts,
     logger,
@@ -30,7 +30,7 @@ def choose_account(accounts: list[dict], handle: str | None) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Dry-run Supabase + Instagram scraper validation")
+    parser = argparse.ArgumentParser(description="Dry-run Supabase + HikerAPI Instagram scraper validation")
     parser.add_argument("--handle", help="Specific Instagram handle to test")
     args = parser.parse_args()
 
@@ -38,23 +38,29 @@ def main() -> int:
 
     try:
         supabase = build_supabase()
-        instagram = build_instagram_client()
+        hikerapi = build_hikerapi_session()
         accounts = get_active_instagram_accounts(supabase)
         account = choose_account(accounts, args.handle)
-        user, posts = scrape_profile(instagram, account["handle"])
+        user, posts = scrape_profile(hikerapi, account["handle"])
 
-        likes_7d = sum(post.likes for post in posts[:7])
-        comments_7d = sum(post.comments for post in posts[:7])
-        followers = int(getattr(user, "follower_count", 0) or 0)
-        following = int(getattr(user, "following_count", 0) or 0)
+        now_utc = datetime.now(timezone.utc)
+        cutoff_7d = now_utc - timedelta(days=7)
+        recent_posts = [post for post in posts if post.taken_at and post.taken_at >= cutoff_7d]
+
+        likes_7d = sum(post.likes for post in recent_posts)
+        comments_7d = sum(post.comments for post in recent_posts)
+        views_7d = sum(post.views for post in recent_posts if post.media_type == 2)
+        followers = int(user.get("follower_count") or 0)
+        following = int(user.get("following_count") or 0)
         engagement_rate = round(((likes_7d + comments_7d) / followers) * 100, 2) if followers > 0 else 0.0
 
-        logger.info("Dry run successful at %s", datetime.now(timezone.utc).isoformat())
+        logger.info("Dry run successful at %s", now_utc.isoformat())
         logger.info("Target account id: %s", account["id"])
         logger.info("Target handle: @%s", account["handle"])
         logger.info("Followers: %s", followers)
         logger.info("Following: %s", following)
         logger.info("Fetched posts: %s", len(posts))
+        logger.info("Views across last 7 days: %s", views_7d)
         logger.info("Likes across last 7 posts: %s", likes_7d)
         logger.info("Comments across last 7 posts: %s", comments_7d)
         logger.info("Engagement rate weekly: %s%%", engagement_rate)

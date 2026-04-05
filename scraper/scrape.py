@@ -6,26 +6,19 @@ import random
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import requests
 from dotenv import load_dotenv
-
-if sys.version_info < (3, 10):
-    raise RuntimeError(
-        "This scraper requires Python 3.10 or newer because instagrapi 2.3.0 uses modern type syntax. "
-        f"Current version: {sys.version.split()[0]}"
-    )
-
-from instagrapi import Client
-from instagrapi.exceptions import ChallengeRequired, LoginRequired, UserNotFound
 from supabase import Client as SupabaseClient
 from supabase import create_client
 
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
+HIKERAPI_BASE_URL = "https://api.hikerapi.com"
 
 
 logging.basicConfig(
@@ -43,20 +36,14 @@ class ScrapedPost:
     comments: int
     views: int
     taken_at: datetime | None
+    media_type: int
 
 
 def env_required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
-      raise RuntimeError(f"Missing required environment variable: {name}")
+        raise RuntimeError(f"Missing required environment variable: {name}")
     return value
-
-
-def resolve_path(raw_path: str) -> Path:
-    path = Path(raw_path).expanduser()
-    if not path.is_absolute():
-        path = (BASE_DIR / path).resolve()
-    return path
 
 
 def build_supabase() -> SupabaseClient:
@@ -65,36 +52,14 @@ def build_supabase() -> SupabaseClient:
     return create_client(url, key)
 
 
-def build_instagram_client() -> Client:
-    session_file = resolve_path(env_required("IG_SESSION_FILE"))
-    proxy_url = os.getenv("PROXY_URL", "").strip()
-    username = os.getenv("IG_USERNAME", "").strip()
-    password = os.getenv("IG_PASSWORD", "").strip()
-
-    client = Client()
-    client.delay_range = [1, 3]
-
-    if proxy_url:
-        client.set_proxy(proxy_url)
-        logger.info("Instagram proxy enabled")
-
-    if session_file.exists():
-        logger.info("Loading Instagram session from %s", session_file)
-        settings = client.load_settings(str(session_file))
-        if settings:
-            client.set_settings(settings)
-    else:
-        if not username or not password:
-            raise RuntimeError(
-                "IG_SESSION_FILE does not exist. Provide IG_USERNAME and IG_PASSWORD for first-time login."
-            )
-        logger.info("No session file found. Performing first-time Instagram login for %s", username)
-        client.login(username, password)
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        client.dump_settings(str(session_file))
-        logger.info("Saved Instagram session to %s", session_file)
-
-    return client
+def build_hikerapi_session() -> requests.Session:
+    api_key = env_required("HIKERAPI_KEY")
+    session = requests.Session()
+    session.headers.update({
+        "x-access-key": api_key,
+        "accept": "application/json",
+    })
+    return session
 
 
 def get_active_instagram_accounts(supabase: SupabaseClient) -> list[dict[str, Any]]:
@@ -142,36 +107,64 @@ def update_account_source(supabase: SupabaseClient, account_id: str) -> None:
     )
 
 
-def extract_view_count(media: Any) -> int:
-    for attr in ("view_count", "play_count", "video_view_count"):
-        value = getattr(media, attr, None)
-        if value is not None:
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return 0
-    return 0
+def normalize_handle(handle: str) -> str:
+    return handle.strip().lstrip("@").rstrip("/")
 
 
-def scrape_profile(client: Client, handle: str) -> tuple[Any, list[ScrapedPost]]:
-    normalized_handle = handle.strip().lstrip("@").rstrip("/")
-    user = client.user_info_by_username(normalized_handle)
-    medias = client.user_medias(user.pk, amount=10)
+def hikerapi_get(session: requests.Session, path: str, params: dict[str, Any]) -> Any:
+    response = session.get(f"{HIKERAPI_BASE_URL}{path}", params=params, timeout=30)
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and "result" in payload:
+        return payload["result"]
+    return payload
+
+
+def extract_media_items(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("items", "medias", "data", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, Any], list[ScrapedPost]]:
+    normalized_handle = normalize_handle(handle)
+    user = hikerapi_get(session, "/v2/user/by/username", {"username": normalized_handle})
+    user_id = user.get("user_id") or user.get("pk") or user.get("id")
+    if not user_id:
+        raise RuntimeError(f"HikerAPI profile response missing user_id for {normalized_handle}")
+
+    medias_payload = hikerapi_get(session, "/v1/user/medias/chunk", {"user_id": user_id})
+    media_items = extract_media_items(medias_payload)
 
     posts: list[ScrapedPost] = []
-    for media in medias:
-        shortcode = getattr(media, "code", None) or getattr(media, "shortcode", None)
+    for media in media_items:
+        shortcode = media.get("code")
         if not shortcode:
             continue
+        taken_at_raw = media.get("taken_at")
+        taken_at = None
+        if taken_at_raw:
+            try:
+                taken_at = datetime.fromtimestamp(int(taken_at_raw), tz=timezone.utc)
+            except (TypeError, ValueError, OSError):
+                taken_at = None
+
         posts.append(
             ScrapedPost(
                 shortcode=str(shortcode),
-                likes=int(getattr(media, "like_count", 0) or 0),
-                comments=int(getattr(media, "comment_count", 0) or 0),
-                views=extract_view_count(media),
-                taken_at=getattr(media, "taken_at", None),
+                likes=int(media.get("like_count") or 0),
+                comments=int(media.get("comment_count") or 0),
+                views=int(media.get("play_count") or 0),
+                taken_at=taken_at,
+                media_type=int(media.get("media_type") or 0),
             )
         )
+
     return user, posts
 
 
@@ -192,7 +185,7 @@ def insert_snapshot(
         "snapshot_date": snapshot_date,
         "followers": followers,
         "following": following,
-        "captured_by": "instagrapi",
+        "captured_by": "hikerapi",
         "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
@@ -218,7 +211,7 @@ def update_snapshot(
     payload = {
         "followers": followers,
         "following": following,
-        "captured_by": "instagrapi",
+        "captured_by": "hikerapi",
         "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
@@ -254,7 +247,7 @@ def insert_posts(
     supabase.table("posts").insert(payload).execute()
 
 
-def process_account(client: Client, supabase: SupabaseClient, account: dict[str, Any], snapshot_date: str) -> None:
+def process_account(session: requests.Session, supabase: SupabaseClient, account: dict[str, Any], snapshot_date: str) -> None:
     account_id = account["id"]
     handle = account["handle"]
 
@@ -275,21 +268,18 @@ def process_account(client: Client, supabase: SupabaseClient, account: dict[str,
         )
 
     try:
-        user, posts = scrape_profile(client, handle)
-    except (LoginRequired, ChallengeRequired) as exc:
-        logger.error("[%s] auth/session issue: %s", handle, exc)
-        return
-    except UserNotFound as exc:
-        logger.error("[%s] user not found: %s", handle, exc)
-        return
+        user, posts = scrape_profile(session, handle)
     except Exception as exc:  # noqa: BLE001
         logger.exception("[%s] scrape failed: %s", handle, exc)
         return
 
-    recent_posts = posts[:7]
-    followers = int(getattr(user, "follower_count", 0) or 0)
-    following = int(getattr(user, "following_count", 0) or 0)
-    ig_views_7d = sum(post.views for post in recent_posts if post.views > 0)
+    now_utc = datetime.now(timezone.utc)
+    cutoff_7d = now_utc - timedelta(days=7)
+    recent_posts = [post for post in posts if post.taken_at and post.taken_at >= cutoff_7d]
+
+    followers = int(user.get("follower_count") or 0)
+    following = int(user.get("following_count") or 0)
+    ig_views_7d = sum(post.views for post in recent_posts if post.media_type == 2)
     ig_likes_7d = sum(post.likes for post in recent_posts)
     ig_comments_7d = sum(post.comments for post in recent_posts)
 
@@ -337,7 +327,7 @@ def main() -> int:
 
     try:
         supabase = build_supabase()
-        instagram = build_instagram_client()
+        hikerapi = build_hikerapi_session()
     except Exception as exc:  # noqa: BLE001
         logger.exception("Startup failed: %s", exc)
         return 1
@@ -348,10 +338,10 @@ def main() -> int:
 
     for index, account in enumerate(accounts, start=1):
         logger.info("Processing %s/%s: %s", index, len(accounts), account["handle"])
-        process_account(instagram, supabase, account, snapshot_date)
+        process_account(hikerapi, supabase, account, snapshot_date)
 
         if index < len(accounts):
-            delay_seconds = random.uniform(2, 5)
+            delay_seconds = 1.0
             logger.info("Sleeping %.2f seconds before next account", delay_seconds)
             time.sleep(delay_seconds)
 
