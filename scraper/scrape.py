@@ -6,7 +6,7 @@ import random
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -201,7 +201,10 @@ def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, An
         taken_at = None
         if taken_at_raw:
             try:
-                taken_at = datetime.fromtimestamp(int(taken_at_raw), tz=timezone.utc)
+                if isinstance(taken_at_raw, str):
+                    taken_at = datetime.fromisoformat(taken_at_raw.replace("Z", "+00:00"))
+                else:
+                    taken_at = datetime.fromtimestamp(int(taken_at_raw), tz=timezone.utc)
             except (TypeError, ValueError, OSError):
                 taken_at = None
 
@@ -324,9 +327,7 @@ def process_account(session: requests.Session, supabase: SupabaseClient, account
         logger.exception("[%s] scrape failed: %s", handle, exc)
         return
 
-    now_utc = datetime.now(timezone.utc)
-    cutoff_7d = now_utc - timedelta(days=7)
-    recent_posts = [post for post in posts if post.taken_at and post.taken_at >= cutoff_7d]
+    recent_posts = posts[:7]
 
     followers = int(user.get("follower_count") or 0)
     following = int(user.get("following_count") or 0)
