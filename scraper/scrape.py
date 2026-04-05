@@ -120,6 +120,17 @@ def hikerapi_get(session: requests.Session, path: str, params: dict[str, Any]) -
     return payload
 
 
+def hikerapi_get_optional(session: requests.Session, path: str, params: dict[str, Any]) -> tuple[int, Any]:
+    response = session.get(f"{HIKERAPI_BASE_URL}{path}", params=params, timeout=30)
+    if response.status_code == 404:
+        return 404, None
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and "result" in payload:
+        return response.status_code, payload["result"]
+    return response.status_code, payload
+
+
 def extract_media_items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
@@ -131,14 +142,40 @@ def extract_media_items(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def fetch_media_payload(session: requests.Session, normalized_handle: str, user_id: str) -> Any:
+    attempts = [
+        ("/v2/user/medias/chunk", {"user_id": str(user_id), "amount": 12}),
+        ("/v1/user/clips/by/user_id", {"user_id": str(user_id), "amount": 12}),
+    ]
+
+    for path, params in attempts:
+        try:
+            status_code, payload = hikerapi_get_optional(session, path, params)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[%s] HikerAPI %s failed: %s", normalized_handle, path, exc)
+            continue
+
+        if status_code == 404:
+            logger.warning("[%s] HikerAPI %s returned 404", normalized_handle, path)
+            continue
+
+        logger.info("[%s] HikerAPI %s raw response: %s", normalized_handle, path, repr(payload)[:800])
+        media_items = extract_media_items(payload)
+        if media_items:
+            return payload
+
+    logger.warning("[%s] HikerAPI media endpoints returned no posts", normalized_handle)
+    return []
+
+
 def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, Any], list[ScrapedPost]]:
     normalized_handle = normalize_handle(handle)
-    user = hikerapi_get(session, "/v2/user/by/username", {"username": normalized_handle})
+    user = hikerapi_get(session, "/v1/user/by/username", {"username": normalized_handle})
     user_id = user.get("user_id") or user.get("pk") or user.get("id")
     if not user_id:
         raise RuntimeError(f"HikerAPI profile response missing user_id for {normalized_handle}")
 
-    medias_payload = hikerapi_get(session, "/v1/user/medias/chunk", {"user_id": user_id})
+    medias_payload = fetch_media_payload(session, normalized_handle, str(user_id))
     media_items = extract_media_items(medias_payload)
 
     posts: list[ScrapedPost] = []
