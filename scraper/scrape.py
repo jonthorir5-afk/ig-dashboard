@@ -122,13 +122,14 @@ def hikerapi_get(session: requests.Session, path: str, params: dict[str, Any]) -
 
 def hikerapi_get_optional(session: requests.Session, path: str, params: dict[str, Any]) -> tuple[int, Any]:
     response = session.get(f"{HIKERAPI_BASE_URL}{path}", params=params, timeout=30)
+    body_preview = response.text[:200]
     if response.status_code == 404:
-        return 404, None
+        return 404, body_preview
     response.raise_for_status()
     payload = response.json()
     if isinstance(payload, dict) and "result" in payload:
-        return response.status_code, payload["result"]
-    return response.status_code, payload
+        return response.status_code, {"payload": payload["result"], "body_preview": body_preview}
+    return response.status_code, {"payload": payload, "body_preview": body_preview}
 
 
 def extract_media_items(payload: Any) -> list[dict[str, Any]]:
@@ -144,8 +145,8 @@ def extract_media_items(payload: Any) -> list[dict[str, Any]]:
 
 def fetch_media_payload(session: requests.Session, normalized_handle: str, user_id: str) -> Any:
     attempts = [
-        ("/v2/user/medias/chunk", {"user_id": str(user_id), "amount": 12}),
-        ("/v1/user/clips/by/user_id", {"user_id": str(user_id), "amount": 12}),
+        ("/v1/user/medias", {"user_id": str(user_id), "amount": 12}),
+        ("/v2/user/medias", {"user_id": str(user_id), "amount": 12}),
     ]
 
     for path, params in attempts:
@@ -156,13 +157,26 @@ def fetch_media_payload(session: requests.Session, normalized_handle: str, user_
             continue
 
         if status_code == 404:
-            logger.warning("[%s] HikerAPI %s returned 404", normalized_handle, path)
+            logger.warning(
+                "[%s] HikerAPI %s returned 404 | body=%s",
+                normalized_handle,
+                path,
+                payload,
+            )
             continue
 
-        logger.info("[%s] HikerAPI %s raw response: %s", normalized_handle, path, repr(payload)[:800])
-        media_items = extract_media_items(payload)
+        body_preview = payload.get("body_preview", "") if isinstance(payload, dict) else ""
+        actual_payload = payload.get("payload") if isinstance(payload, dict) and "payload" in payload else payload
+        logger.info(
+            "[%s] HikerAPI %s response status=%s body=%s",
+            normalized_handle,
+            path,
+            status_code,
+            body_preview,
+        )
+        media_items = extract_media_items(actual_payload)
         if media_items:
-            return payload
+            return actual_payload
 
     logger.warning("[%s] HikerAPI media endpoints returned no posts", normalized_handle)
     return []
