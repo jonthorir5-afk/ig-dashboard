@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Search, Filter, X, Download, Edit2, Trash2 } from 'lucide-react'
-import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount, getLatestOFTracking, getInstagramConnections, startInstagramAuth } from '../lib/api'
+import { Plus, Search, X, Download, Edit2, Trash2 } from 'lucide-react'
+import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount, getLatestOFTracking } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { healthColor, exportToCSV } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
@@ -14,13 +14,10 @@ export default function AccountsPage() {
   const { canManage } = useAuth()
   const [accounts, setAccounts] = useState([])
   const [ofTracking, setOfTracking] = useState([])
-  const [instagramConnections, setInstagramConnections] = useState([])
   const [models, setModels] = useState([])
   const [operators, setOperators] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [connectingAccountId, setConnectingAccountId] = useState('')
-  const [instagramAuthNotice, setInstagramAuthNotice] = useState(null)
   const [accountCreationNotice, setAccountCreationNotice] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -36,35 +33,17 @@ export default function AccountsPage() {
 
   const load = async () => {
     setLoading(true)
-    const [accs, mods, ops, tracking, connections] = await Promise.all([getAccounts(), getModels(), getProfiles(), getLatestOFTracking(90), getInstagramConnections()])
+    const [accs, mods, ops, tracking] = await Promise.all([getAccounts(), getModels(), getProfiles(), getLatestOFTracking(90)])
     setAccounts(accs)
     setOfTracking(tracking)
-    setInstagramConnections(connections)
     setModels(mods)
     setOperators(ops)
     setLoading(false)
   }
   useEffect(() => { load() }, [])
 
-  useEffect(() => {
-    const hash = window.location.hash || ''
-    const [, queryString = ''] = hash.split('?')
-    const params = new URLSearchParams(queryString)
-    const status = params.get('instagram_meta_status')
-    if (!status) return
-
-    setInstagramAuthNotice({
-      status,
-      message: params.get('instagram_meta_message') || '',
-    })
-
-    const cleanHash = hash.split('?')[0]
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${cleanHash}`)
-  }, [])
-
   const filtered = useMemo(() => {
     const trackingByAccount = Object.fromEntries(ofTracking.map(row => [row.account_id, row]))
-    const instagramConnectionByAccount = Object.fromEntries(instagramConnections.map(row => [row.account_id, row]))
     let result = accounts
     if (search) result = result.filter(a => a.handle.toLowerCase().includes(search.toLowerCase()) || a.model?.name?.toLowerCase().includes(search.toLowerCase()))
     if (filterPlatform) result = result.filter(a => a.platform === filterPlatform)
@@ -77,35 +56,13 @@ export default function AccountsPage() {
       return {
         ...account,
         _of: of,
-        _igConnection: instagramConnectionByAccount[account.id] || null,
         _ofClicks: clicks,
         _ofSubs: subscribers,
         _ofRevenue: Number(of?.revenue_total || 0),
         _ofCvr: clicks > 0 ? (subscribers / clicks) * 100 : 0,
       }
     })
-  }, [accounts, ofTracking, instagramConnections, search, filterPlatform, filterModel, filterStatus])
-
-  const handleConnectInstagram = async (account) => {
-    setConnectingAccountId(account.id)
-    try {
-      const { authUrl } = await startInstagramAuth(account.id)
-      window.location.href = authUrl
-    } catch (err) {
-      alert(`Instagram connect failed: ${err.message}`)
-      setConnectingAccountId('')
-    }
-  }
-
-  const getInstagramConnectionBadge = (account) => {
-    if (account.platform !== 'instagram') return { label: '—', color: 'var(--text-tertiary)', bg: 'transparent' }
-    const connection = account._igConnection
-    if (!connection) return { label: 'Not connected', color: 'var(--text-tertiary)', bg: 'rgba(148,163,184,0.12)' }
-    if (connection.status === 'connected') return { label: 'Connected', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' }
-    if (connection.status === 'expired') return { label: 'Expired', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' }
-    if (connection.status === 'revoked') return { label: 'Revoked', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }
-    return { label: 'Error', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }
-  }
+  }, [accounts, ofTracking, search, filterPlatform, filterModel, filterStatus])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -121,7 +78,6 @@ export default function AccountsPage() {
       } else {
         const created = await createAccount(payload)
         setAccountCreationNotice({
-          accountId: created.id,
           handle: created.handle,
           platform: created.platform,
         })
@@ -184,29 +140,6 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {instagramAuthNotice && (
-        <div
-          className="glass-panel"
-          style={{
-            padding: '0.9rem 1rem',
-            marginBottom: '1rem',
-            border: `1px solid ${instagramAuthNotice.status === 'connected' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
-            background: instagramAuthNotice.status === 'connected' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: '1rem',
-            alignItems: 'center',
-          }}
-        >
-          <span style={{ color: instagramAuthNotice.status === 'connected' ? '#86efac' : '#fca5a5', fontSize: '0.9rem' }}>
-            {instagramAuthNotice.message || (instagramAuthNotice.status === 'connected' ? 'Instagram connected successfully.' : 'Instagram connection failed.')}
-          </span>
-          <button className="icon-btn" type="button" onClick={() => setInstagramAuthNotice(null)}>
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
       {accountCreationNotice && (
         <div
           className="glass-panel"
@@ -224,20 +157,8 @@ export default function AccountsPage() {
         >
           <span style={{ color: '#c7d2fe', fontSize: '0.9rem' }}>
             @{getDisplayHandle(accountCreationNotice.handle, accountCreationNotice.platform)} was added successfully.
-            {accountCreationNotice.platform === 'instagram' ? ' Connect Instagram now to enable Meta syncing.' : ''}
           </span>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            {accountCreationNotice.platform === 'instagram' && (
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={() => handleConnectInstagram({ id: accountCreationNotice.accountId })}
-                disabled={connectingAccountId === accountCreationNotice.accountId}
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-              >
-                {connectingAccountId === accountCreationNotice.accountId ? 'Connecting...' : 'Connect Instagram'}
-              </button>
-            )}
             <button className="icon-btn" type="button" onClick={() => setAccountCreationNotice(null)}>
               <X size={16} />
             </button>
@@ -275,7 +196,6 @@ export default function AccountsPage() {
                 <th>Platform</th>
                 <th>Model</th>
                 <th>Type</th>
-                <th>IG Connection</th>
                 <th>OF Link</th>
                 <th className="numeric">OF Clicks</th>
                 <th className="numeric">OF Subs</th>
@@ -290,41 +210,12 @@ export default function AccountsPage() {
             <tbody>
               {filtered.map(a => {
                 const hc = healthColor(a.health)
-                const igBadge = getInstagramConnectionBadge(a)
                 return (
                   <tr key={a.id}>
                     <td><strong style={{ color: 'var(--text-primary)' }}>@{getDisplayHandle(a)}</strong></td>
                     <td style={{ textTransform: 'capitalize' }}>{a.platform === 'twitter' ? 'Twitter / X' : a.platform}</td>
                     <td>{a.model?.name || '—'}</td>
                     <td>{a.account_type}</td>
-                    <td>
-                      {a.platform === 'instagram' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
-                          <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: igBadge.color, background: igBadge.bg }}>
-                            {igBadge.label}
-                          </span>
-                          {a._igConnection?.instagram_username && (
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-                              @{a._igConnection.instagram_username}
-                            </span>
-                          )}
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            onClick={() => handleConnectInstagram(a)}
-                            disabled={connectingAccountId === a.id}
-                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
-                          >
-                            {connectingAccountId === a.id ? 'Connecting...' : (a._igConnection ? 'Reconnect' : 'Connect Instagram')}
-                          </button>
-                          {a._igConnection?.last_error && (
-                            <span style={{ fontSize: '0.7rem', color: 'var(--accent-danger)', maxWidth: '180px' }}>
-                              {a._igConnection.last_error}
-                            </span>
-                          )}
-                        </div>
-                      ) : '—'}
-                    </td>
                     <td style={{ fontSize: '0.8rem', color: a._of ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{a._of?.tracking_link_name || '—'}</td>
                     <td className="numeric">{formatCompact(a._ofClicks)}</td>
                     <td className="numeric font-semibold">{formatCompact(a._ofSubs)}</td>
@@ -349,7 +240,7 @@ export default function AccountsPage() {
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={canManage ? 14 : 13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts match your filters.</td></tr>
+                <tr><td colSpan={canManage ? 13 : 12} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No accounts match your filters.</td></tr>
               )}
             </tbody>
           </table>

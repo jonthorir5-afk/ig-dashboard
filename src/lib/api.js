@@ -129,29 +129,6 @@ export async function deleteAccount(id) {
   if (error) throw error
 }
 
-export async function getInstagramConnections() {
-  if (isDemoMode()) return []
-  const { data, error } = await supabase
-    .from('instagram_connections')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data
-}
-
-export async function startInstagramAuth(accountId) {
-  const res = await fetch('/.netlify/functions/instagram-auth-start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account_id: accountId }),
-  })
-  const text = await res.text()
-  let data
-  try { data = JSON.parse(text) } catch { throw new Error(text || 'Failed to start Instagram auth') }
-  if (!res.ok) throw new Error(data.error || 'Failed to start Instagram auth')
-  return data
-}
-
 // ============================================================
 // SNAPSHOTS
 // ============================================================
