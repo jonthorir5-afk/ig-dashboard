@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import random
 import sys
 import time
 from dataclasses import dataclass
@@ -18,7 +17,7 @@ from supabase import create_client
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
-HIKERAPI_BASE_URL = "https://api.hikerapi.com"
+ROCKETAPI_BASE_URL = "https://v1.rocketapi.io"
 
 
 logging.basicConfig(
@@ -52,11 +51,12 @@ def build_supabase() -> SupabaseClient:
     return create_client(url, key)
 
 
-def build_hikerapi_session() -> requests.Session:
-    api_key = env_required("HIKERAPI_KEY")
+def build_rocketapi_session() -> requests.Session:
+    api_key = env_required("ROCKETAPI_KEY")
     session = requests.Session()
     session.headers.update({
-        "x-access-key": api_key,
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/json",
         "accept": "application/json",
     })
     return session
@@ -111,147 +111,70 @@ def normalize_handle(handle: str) -> str:
     return handle.strip().lstrip("@").rstrip("/")
 
 
-def hikerapi_get(session: requests.Session, path: str, params: dict[str, Any]) -> Any:
-    response = session.get(f"{HIKERAPI_BASE_URL}{path}", params=params, timeout=30)
+def dig(data: Any, *path: str) -> Any:
+    current = data
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def rocketapi_post(session: requests.Session, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    response = session.post(f"{ROCKETAPI_BASE_URL}{path}", json=payload, timeout=30)
     response.raise_for_status()
-    payload = response.json()
-    if isinstance(payload, dict) and "result" in payload:
-        return payload["result"]
-    return payload
+    return response.json()
 
 
-def hikerapi_get_optional(session: requests.Session, path: str, params: dict[str, Any]) -> tuple[int, Any]:
-    response = session.get(f"{HIKERAPI_BASE_URL}{path}", params=params, timeout=30)
-    body_preview = response.text[:200]
-    if response.status_code == 404:
-        return 404, body_preview
-    response.raise_for_status()
-    payload = response.json()
-    if isinstance(payload, dict) and "result" in payload:
-        return response.status_code, {"payload": payload["result"], "body_preview": body_preview}
-    return response.status_code, {"payload": payload, "body_preview": body_preview}
-
-
-def extract_media_items(payload: Any) -> list[dict[str, Any]]:
-    if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
-    if isinstance(payload, dict):
-        for key in ("items", "medias", "data", "results"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+def extract_media_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    items = (
+        dig(payload, "data", "items")
+        or dig(payload, "items")
+        or dig(payload, "response", "body", "items")
+        or dig(payload, "response", "body", "data", "items")
+        or []
+    )
+    if isinstance(items, dict):
+        return [item for item in items.values() if isinstance(item, dict)]
+    if isinstance(items, list):
+        return [item for item in items if isinstance(item, dict)]
     return []
 
 
-def fetch_endpoint_payload(session: requests.Session, normalized_handle: str, path: str, params: dict[str, Any], allow_404: bool = False) -> Any:
+def parse_taken_at(value: Any) -> datetime | None:
+    if value is None:
+        return None
     try:
-        status_code, payload = hikerapi_get_optional(session, path, params)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[%s] HikerAPI %s failed: %s", normalized_handle, path, exc)
-        return []
-
-    if status_code == 404:
-        if allow_404:
-            logger.warning("[%s] HikerAPI %s returned 404; continuing without it", normalized_handle, path)
-            return []
-        logger.warning(
-            "[%s] HikerAPI %s returned 404 | body=%s",
-            normalized_handle,
-            path,
-            payload,
-        )
-        return []
-
-    body_preview = payload.get("body_preview", "") if isinstance(payload, dict) else ""
-    actual_payload = payload.get("payload") if isinstance(payload, dict) and "payload" in payload else payload
-    logger.info(
-        "[%s] HikerAPI %s response status=%s body=%s",
-        normalized_handle,
-        path,
-        status_code,
-        body_preview,
-    )
-    return actual_payload
-
-
-def fetch_media_payload(session: requests.Session, normalized_handle: str, user_id: str) -> list[dict[str, Any]]:
-    attempts = [
-        ("/v1/user/medias", {"user_id": str(user_id), "amount": 12}),
-        ("/v2/user/medias", {"user_id": str(user_id), "amount": 12}),
-    ]
-
-    for path, params in attempts:
-        actual_payload = fetch_endpoint_payload(session, normalized_handle, path, params)
-        media_items = extract_media_items(actual_payload)
-        if media_items:
-            return media_items
-
-    logger.warning("[%s] HikerAPI media endpoints returned no posts", normalized_handle)
-    return []
-
-
-def fetch_clips_payload(session: requests.Session, normalized_handle: str, user_id: str) -> list[dict[str, Any]]:
-    payload = fetch_endpoint_payload(
-        session,
-        normalized_handle,
-        "/v1/user/clips/by/user_id",
-        {"user_id": str(user_id), "amount": 12},
-        allow_404=True,
-    )
-    clips = extract_media_items(payload)
-    if not clips:
-        logger.warning("[%s] HikerAPI clips endpoint returned no reels", normalized_handle)
-    return clips
+        if isinstance(value, str):
+            if value.endswith("Z"):
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return datetime.fromisoformat(value)
+        return datetime.fromtimestamp(int(value), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, Any], list[ScrapedPost]]:
     normalized_handle = normalize_handle(handle)
-    user = hikerapi_get(session, "/v1/user/by/username", {"username": normalized_handle})
-    user_id = user.get("user_id") or user.get("pk") or user.get("id")
+
+    info_json = rocketapi_post(session, "/instagram/user/get_info", {"username": normalized_handle})
+    user = (
+        dig(info_json, "data", "user")
+        or dig(info_json, "response", "body", "data", "user")
+        or {}
+    )
+    user_id = user.get("pk") or user.get("id")
     if not user_id:
-        raise RuntimeError(f"HikerAPI profile response missing user_id for {normalized_handle}")
+        raise RuntimeError(f"RocketAPI get_info response missing user id for {normalized_handle}")
 
-    media_items = fetch_media_payload(session, normalized_handle, str(user_id))
-    clip_items = fetch_clips_payload(session, normalized_handle, str(user_id))
-
-    combined_by_pk: dict[str, dict[str, Any]] = {}
-    for media in [*media_items, *clip_items]:
-        pk = media.get("pk") or media.get("id")
-        if not pk:
-            continue
-        combined_by_pk[str(pk)] = media
-
-    merged_items = list(combined_by_pk.values())
-    merged_items.sort(key=lambda media: str(media.get("taken_at") or media.get("taken_at_ts") or ""), reverse=True)
-
-    for index, media in enumerate(merged_items[:12], start=1):
-        logger.info(
-            "[%s] post %s: taken_at=%s media_type=%s product_type=%s play_count=%s likes=%s code=%s",
-            normalized_handle,
-            index,
-            media.get("taken_at"),
-            media.get("media_type"),
-            media.get("product_type"),
-            media.get("play_count"),
-            media.get("like_count"),
-            media.get("code"),
-        )
+    media_json = rocketapi_post(session, "/instagram/user/get_media", {"id": str(user_id)})
+    media_items = extract_media_items(media_json)
 
     posts: list[ScrapedPost] = []
-    for media in merged_items[:12]:
-        shortcode = media.get("code")
+    for media in media_items[:12]:
+        shortcode = media.get("code") or media.get("shortcode")
         if not shortcode:
             continue
-        taken_at_raw = media.get("taken_at")
-        taken_at = None
-        if taken_at_raw:
-            try:
-                if isinstance(taken_at_raw, str):
-                    taken_at = datetime.fromisoformat(taken_at_raw.replace("Z", "+00:00"))
-                else:
-                    taken_at = datetime.fromtimestamp(int(taken_at_raw), tz=timezone.utc)
-            except (TypeError, ValueError, OSError):
-                taken_at = None
 
         posts.append(
             ScrapedPost(
@@ -259,7 +182,7 @@ def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, An
                 likes=int(media.get("like_count") or 0),
                 comments=int(media.get("comment_count") or 0),
                 views=int(media.get("play_count") or 0),
-                taken_at=taken_at,
+                taken_at=parse_taken_at(media.get("taken_at")),
                 media_type=int(media.get("media_type") or 0),
             )
         )
@@ -284,7 +207,7 @@ def insert_snapshot(
         "snapshot_date": snapshot_date,
         "followers": followers,
         "following": following,
-        "captured_by": "hikerapi",
+        "captured_by": "rocketapi",
         "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
@@ -310,7 +233,7 @@ def update_snapshot(
     payload = {
         "followers": followers,
         "following": following,
-        "captured_by": "hikerapi",
+        "captured_by": "rocketapi",
         "ig_views_7d": ig_views_7d,
         "ig_likes_7d": ig_likes_7d,
         "ig_comments_7d": ig_comments_7d,
@@ -372,10 +295,9 @@ def process_account(session: requests.Session, supabase: SupabaseClient, account
         logger.exception("[%s] scrape failed: %s", handle, exc)
         return
 
-    recent_posts = posts[:7]
-
-    followers = int(user.get("follower_count") or 0)
-    following = int(user.get("following_count") or 0)
+    recent_posts = posts[:12]
+    followers = int(user.get("edge_followed_by", {}).get("count") or user.get("follower_count") or 0)
+    following = int(user.get("edge_follow", {}).get("count") or user.get("following_count") or 0)
     ig_views_7d = sum(post.views for post in recent_posts if post.media_type == 2)
     ig_likes_7d = sum(post.likes for post in recent_posts)
     ig_comments_7d = sum(post.comments for post in recent_posts)
@@ -406,7 +328,7 @@ def process_account(session: requests.Session, supabase: SupabaseClient, account
         if post_count == 0:
             insert_posts(supabase, account_id, snapshot_id, posts, account.get("platform", "instagram"))
         logger.info(
-            "[%s] success | followers=%s following=%s posts=%s views_7=%s likes_7=%s comments_7=%s",
+            "[%s] success | followers=%s following=%s posts=%s views_12=%s likes_12=%s comments_12=%s",
             handle,
             followers,
             following,
@@ -424,7 +346,7 @@ def main() -> int:
 
     try:
         supabase = build_supabase()
-        hikerapi = build_hikerapi_session()
+        rocketapi = build_rocketapi_session()
     except Exception as exc:  # noqa: BLE001
         logger.exception("Startup failed: %s", exc)
         return 1
@@ -435,7 +357,7 @@ def main() -> int:
 
     for index, account in enumerate(accounts, start=1):
         logger.info("Processing %s/%s: %s", index, len(accounts), account["handle"])
-        process_account(hikerapi, supabase, account, snapshot_date)
+        process_account(rocketapi, supabase, account, snapshot_date)
 
         if index < len(accounts):
             delay_seconds = 1.0

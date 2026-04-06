@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from scrape import (
     ENV_PATH,
-    build_hikerapi_session,
+    build_rocketapi_session,
     build_supabase,
     get_active_instagram_accounts,
     logger,
@@ -30,7 +30,7 @@ def choose_account(accounts: list[dict], handle: str | None) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Dry-run Supabase + HikerAPI Instagram scraper validation")
+    parser = argparse.ArgumentParser(description="Dry-run Supabase + RocketAPI Instagram scraper validation")
     parser.add_argument("--handle", help="Specific Instagram handle to test")
     args = parser.parse_args()
 
@@ -38,20 +38,20 @@ def main() -> int:
 
     try:
         supabase = build_supabase()
-        hikerapi = build_hikerapi_session()
+        rocketapi = build_rocketapi_session()
         accounts = get_active_instagram_accounts(supabase)
         account = choose_account(accounts, args.handle)
-        user, posts = scrape_profile(hikerapi, account["handle"])
+        user, posts = scrape_profile(rocketapi, account["handle"])
 
         now_utc = datetime.now(timezone.utc)
         cutoff_7d = now_utc - timedelta(days=7)
-        recent_posts = [post for post in posts if post.taken_at and post.taken_at >= cutoff_7d]
+        recent_posts = posts[:12]
 
         likes_7d = sum(post.likes for post in recent_posts)
         comments_7d = sum(post.comments for post in recent_posts)
         views_7d = sum(post.views for post in recent_posts if post.media_type == 2)
-        followers = int(user.get("follower_count") or 0)
-        following = int(user.get("following_count") or 0)
+        followers = int(user.get("edge_followed_by", {}).get("count") or user.get("follower_count") or 0)
+        following = int(user.get("edge_follow", {}).get("count") or user.get("following_count") or 0)
         engagement_rate = round(((likes_7d + comments_7d) / followers) * 100, 2) if followers > 0 else 0.0
 
         logger.info("Dry run successful at %s", now_utc.isoformat())
