@@ -1067,11 +1067,15 @@ const cellInputStyle = {
 }
 
 function normalizeTrackingToken(value) {
-  return (value || '')
+  let normalized = (value || '')
     .toLowerCase()
     .trim()
     .replace(/^@/, '')
     .replace(/\s+/g, '')
+
+  if (normalized.startsWith('u/')) normalized = normalized.slice(2)
+
+  return normalized
 }
 
 function getTrackingLinkModelSlug(link) {
