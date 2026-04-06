@@ -129,13 +129,19 @@ export default function ExecOverview() {
     const clicksTrend = prevClicks ? ((totalClicks - prevClicks) / prevClicks * 100).toFixed(1) : null
 
     // Per-platform followers and views (total from latest snapshots)
+    const getPlatformMainMetric = (platform, snapshot) => {
+      if (!snapshot) return 0
+      if (platform === 'reddit') return snapshot.rd_karma_total || 0
+      return snapshot.followers || 0
+    }
+
     const platformFollowers = {}
     for (const p of ['twitter', 'reddit', 'instagram', 'tiktok']) {
       const platAccountIds = new Set(accounts.filter(a => a.platform === p).map(a => a.id))
       const platLatest = latestArr.filter(s => platAccountIds.has(s.account_id))
       const platPrev = prevArr.filter(s => platAccountIds.has(s.account_id))
-      const followers = platLatest.reduce((sum, s) => sum + (s.followers || 0), 0)
-      const prevFollowers = platPrev.reduce((sum, s) => sum + (s.followers || 0), 0)
+      const followers = platLatest.reduce((sum, s) => sum + getPlatformMainMetric(p, s), 0)
+      const prevFollowers = platPrev.reduce((sum, s) => sum + getPlatformMainMetric(p, s), 0)
       const views = platLatest.reduce((sum, s) => sum + (getSnapshotViews(s) || 0), 0)
       platformFollowers[p] = {
         followers,
