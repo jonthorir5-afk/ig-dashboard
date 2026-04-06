@@ -14,6 +14,31 @@ function formatChange(value) {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
+function deriveHealth(account, snapshot) {
+  if (account?.health && account.health !== 'Clean') return account.health
+  if (!snapshot) return account?.health || 'Clean'
+  if (account?.platform === 'reddit') {
+    if (snapshot.rd_ban_log === 'suspended') return 'Suspended'
+    if (snapshot.rd_ban_log) return 'Limited'
+    if ((snapshot.rd_karma_total ?? null) === 0) return 'Limited'
+    return 'Clean'
+  }
+  if ((snapshot.followers ?? null) === 0) return 'Limited'
+  return account?.health || 'Clean'
+}
+
+function formatSnapshotDate(snapshotDate) {
+  if (!snapshotDate) return '—'
+  return new Date(`${snapshotDate}T00:00:00`).toLocaleDateString()
+}
+
+function computeAvgUpvotes(avgValue, upvotes, posts) {
+  if (avgValue != null) return avgValue
+  if (posts == null) return null
+  if (!posts) return 0
+  return Math.round((upvotes || 0) / posts)
+}
+
 export default function PlatformPage() {
   const { platform } = useParams()
   const [accounts, setAccounts] = useState([])
@@ -71,8 +96,8 @@ export default function PlatformPage() {
       _rdPosts7d: snapByAccount[a.id]?.rd_posts_7d || 0,
       _rdUpvotes1d: snapByAccount[a.id]?.rd_upvotes_1d || 0,
       _rdUpvotes7d: snapByAccount[a.id]?.rd_upvotes_7d || 0,
-      _rdAvgUpvotes1d: snapByAccount[a.id]?.rd_avg_upvotes_1d || 0,
-      _rdAvgUpvotes7d: snapByAccount[a.id]?.rd_avg_upvotes_7d || 0,
+      _rdAvgUpvotes1d: computeAvgUpvotes(snapByAccount[a.id]?.rd_avg_upvotes_1d, snapByAccount[a.id]?.rd_upvotes_1d, snapByAccount[a.id]?.rd_posts_1d),
+      _rdAvgUpvotes7d: computeAvgUpvotes(snapByAccount[a.id]?.rd_avg_upvotes_7d, snapByAccount[a.id]?.rd_upvotes_7d, snapByAccount[a.id]?.rd_posts_7d),
       _rdReplies7d: snapByAccount[a.id]?.rd_comments_received_7d || 0,
       _vtfr: snapByAccount[a.id]?.vtfr_weekly || 0,
       _er: snapByAccount[a.id]?.engagement_rate_weekly || 0,
@@ -80,6 +105,7 @@ export default function PlatformPage() {
       _ofSubs: ofByAccount[a.id]?.subscribers || 0,
       _ofRevenue: Number(ofByAccount[a.id]?.revenue_total || 0),
       _ofCvr: (ofByAccount[a.id]?.clicks || 0) > 0 ? ((ofByAccount[a.id]?.subscribers || 0) / ofByAccount[a.id].clicks) * 100 : 0,
+      _health: deriveHealth(a, snapByAccount[a.id] || null),
     }))
     if (selectedPlatform) result = result.filter(a => a.platform === selectedPlatform)
     if (selectedModelIds.length > 0) result = result.filter(a => selectedModelIds.includes(a.model_id))
@@ -145,12 +171,37 @@ export default function PlatformPage() {
     const dateMap = {}
     for (const s of history) {
       if (selectedPlatform && s.account?.platform !== selectedPlatform) continue
-      if (!dateMap[s.snapshot_date]) dateMap[s.snapshot_date] = { date: s.snapshot_date, views: 0, followers: 0 }
+      if (!dateMap[s.snapshot_date]) {
+        dateMap[s.snapshot_date] = { date: s.snapshot_date, views: 0, followers: 0, redditPosts: 0, redditUpvotes: 0, redditReplies: 0 }
+      }
       dateMap[s.snapshot_date].views += getSnapshotViews(s)
       dateMap[s.snapshot_date].followers += s.followers || 0
+      dateMap[s.snapshot_date].redditPosts += s.rd_posts_7d || 0
+      dateMap[s.snapshot_date].redditUpvotes += s.rd_upvotes_7d || 0
+      dateMap[s.snapshot_date].redditReplies += s.rd_comments_received_7d || 0
     }
-    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+    return Object.values(dateMap)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(row => {
+        const redditActivity = row.redditPosts + row.redditUpvotes + row.redditReplies
+        return {
+          date: row.date,
+          views: selectedPlatform === 'instagram' && row.views === 0 ? null : row.views,
+          followers: row.followers,
+          activity: selectedPlatform === 'reddit' && redditActivity === 0 ? null : redditActivity,
+        }
+      })
   }, [history, selectedPlatform])
+
+  const latestSnapshotDate = useMemo(() => {
+    let latest = null
+    for (const account of merged) {
+      const date = account.snapshot?.snapshot_date
+      if (!date) continue
+      if (!latest || date > latest) latest = date
+    }
+    return latest
+  }, [merged])
 
   const showInstagramMetrics = selectedPlatform === 'instagram'
   const showTwitterMetrics = selectedPlatform === 'twitter'
@@ -218,28 +269,37 @@ export default function PlatformPage() {
       </div>
 
       {/* Trend Chart */}
-      {dailyTrend.length > 1 && (
-        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+      <div className="glass-panel" style={{ padding: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <h3 style={{ fontSize: '0.95rem' }}>
             {selectedPlatform === 'reddit'
               ? 'Reddit — Activity Over Time'
               : `${selectedPlatform ? PLATFORM_LABELS[selectedPlatform] : 'All Platforms'} — Views & Followers Over Time`}
           </h3>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+            Last updated: {formatSnapshotDate(latestSnapshotDate)}
+          </span>
+        </div>
           <TrendChart
             data={dailyTrend}
             lines={showRedditMetrics
-              ? [{ key: 'views', label: 'Activity', color: COLORS.primary }]
+              ? [{ key: 'activity', label: 'Activity', color: COLORS.primary }]
               : [
                   { key: 'views', label: 'Views', color: COLORS.primary },
                   { key: 'followers', label: 'Followers', color: COLORS.success },
                 ]}
             height={240}
           />
-        </div>
-      )}
+      </div>
 
       {/* Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem 0.5rem', flexWrap: 'wrap' }}>
+          <h3 style={{ fontSize: '0.95rem' }}>{selectedPlatform ? `${PLATFORM_LABELS[selectedPlatform]} Accounts` : 'Platform Accounts'}</h3>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+            Last updated: {formatSnapshotDate(latestSnapshotDate)}
+          </span>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="accounts-table" style={{ minWidth: showInstagramMetrics || showTwitterMetrics || showRedditMetrics ? '1560px' : '1200px' }}>
             <thead>
@@ -281,7 +341,7 @@ export default function PlatformPage() {
             </thead>
             <tbody>
               {merged.map((a, i) => {
-                const hc = healthColor(a.health)
+                const hc = healthColor(a._health)
                 const trend = trendByAccount[a.id]
                 const hasMapping = Boolean(a.linkMapping)
                 const hasTracking = Boolean(a.ofTracking)
@@ -293,7 +353,7 @@ export default function PlatformPage() {
                     ? 'Not synced yet'
                     : 'Unmapped'
                 return (
-                  <tr key={a.id} style={a.health !== 'Clean' ? { background: 'rgba(239, 68, 68, 0.03)' } : undefined}>
+                  <tr key={a.id} style={a._health !== 'Clean' ? { background: 'rgba(239, 68, 68, 0.03)' } : undefined}>
                     <td style={{ color: 'var(--text-tertiary)' }}>{i + 1}</td>
                     <td>
                       {accountUrl ? (
@@ -308,7 +368,7 @@ export default function PlatformPage() {
                     {!selectedPlatform && <td style={{ textTransform: 'capitalize' }}>{a.platform}</td>}
                     <td>
                       <span style={{ padding: '0.2rem 0.5rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 600, color: hc.color, background: hc.bg }}>
-                        {a.health}
+                        {a._health}
                       </span>
                     </td>
                     {showFollowerColumn && <td className="numeric font-semibold">{a._followers != null ? formatNumber(a._followers) : '—'}</td>}
@@ -336,8 +396,8 @@ export default function PlatformPage() {
                     {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_posts_7d || 0)}</td>}
                     {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_upvotes_1d || 0)}</td>}
                     {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_upvotes_7d || 0)}</td>}
-                    {showRedditMetrics && <td className="numeric">{a.snapshot?.rd_avg_upvotes_1d != null ? formatNumber(a.snapshot?.rd_avg_upvotes_1d || 0) : '—'}</td>}
-                    {showRedditMetrics && <td className="numeric">{a.snapshot?.rd_avg_upvotes_7d != null ? formatNumber(a.snapshot?.rd_avg_upvotes_7d || 0) : '—'}</td>}
+                    {showRedditMetrics && <td className="numeric">{a._rdAvgUpvotes1d != null ? formatNumber(a._rdAvgUpvotes1d) : '—'}</td>}
+                    {showRedditMetrics && <td className="numeric">{a._rdAvgUpvotes7d != null ? formatNumber(a._rdAvgUpvotes7d) : '—'}</td>}
                     {showRedditMetrics && <td className="numeric">{formatNumber(a.snapshot?.rd_comments_received_7d || 0)}</td>}
                     {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <td className="numeric font-semibold">{formatNumber(a._views)}</td>}
                     {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <td className="numeric">{formatNumber(a._clicks)}</td>}

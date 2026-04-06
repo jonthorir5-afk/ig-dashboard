@@ -46,13 +46,24 @@ function CustomTooltip({ active, payload, label, formatter }) {
  * lines: [{ key: 'followers', label: 'Followers', color: '#10b981' }, ...]
  */
 export function TrendChart({ data, lines, height = 300, formatter }) {
-  if (!data?.length) return <EmptyChart height={height} />
+  const hasPlottableData = Array.isArray(data) && data.some(row =>
+    lines.some(line => row?.[line.key] != null)
+  )
+  if (!data?.length || !hasPlottableData) return <EmptyChart height={height} />
+
+  const singlePoint = data.length === 1
+  const renderDot = (props) => {
+    const { cx, cy, payload, dataKey, stroke } = props
+    if (!payload || payload[dataKey] == null) return null
+    return <circle cx={cx} cy={cy} r={singlePoint ? 5 : 3} fill={stroke} stroke="none" />
+  }
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
         <XAxis dataKey="date" tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chartTheme.grid }} />
-        <YAxis tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
+        <YAxis domain={[0, 'auto']} tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
         <Tooltip content={<CustomTooltip formatter={formatter || formatNumber} />} />
         <Legend wrapperStyle={{ fontSize: '0.75rem', color: chartTheme.text }} />
         {lines.map(line => (
@@ -63,8 +74,10 @@ export function TrendChart({ data, lines, height = 300, formatter }) {
             name={line.label}
             stroke={line.color || COLORS.primary}
             strokeWidth={2}
-            dot={{ r: 3, fill: line.color || COLORS.primary }}
+            dot={renderDot}
             activeDot={{ r: 5, strokeWidth: 0 }}
+            connectNulls={false}
+            isAnimationActive={false}
           />
         ))}
       </LineChart>
@@ -76,7 +89,8 @@ export function TrendChart({ data, lines, height = 300, formatter }) {
  * Filled area chart — good for single metric trends.
  */
 export function AreaTrendChart({ data, dataKey, label, color = COLORS.primary, height = 250, formatter }) {
-  if (!data?.length) return <EmptyChart height={height} />
+  const hasPlottableData = Array.isArray(data) && data.some(row => row?.[dataKey] != null)
+  if (!data?.length || !hasPlottableData) return <EmptyChart height={height} />
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -88,7 +102,7 @@ export function AreaTrendChart({ data, dataKey, label, color = COLORS.primary, h
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
         <XAxis dataKey="date" tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chartTheme.grid }} />
-        <YAxis tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
+        <YAxis domain={[0, 'auto']} tick={{ fill: chartTheme.text, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
         <Tooltip content={<CustomTooltip formatter={formatter || formatNumber} />} />
         <Area
           type="monotone"
@@ -97,6 +111,7 @@ export function AreaTrendChart({ data, dataKey, label, color = COLORS.primary, h
           stroke={color}
           strokeWidth={2}
           fill={`url(#gradient-${dataKey})`}
+          isAnimationActive={false}
         />
       </AreaChart>
     </ResponsiveContainer>
@@ -105,8 +120,8 @@ export function AreaTrendChart({ data, dataKey, label, color = COLORS.primary, h
 
 function EmptyChart({ height }) {
   return (
-    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-      No data to display yet
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: '0.875rem', border: '1px dashed var(--border-color)', borderRadius: '12px', background: 'rgba(255,255,255,0.02)' }}>
+      No data yet — check back after the first scrape runs
     </div>
   )
 }
