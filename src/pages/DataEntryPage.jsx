@@ -1086,6 +1086,7 @@ function getScopedTrackingLinks(account, models, ofLinks) {
   const model = models.find(m => m.id === account.model_id)
   const allowedSlugs = new Set([
     normalizeTrackingToken(account?.of_username_override),
+    normalizeTrackingToken(account?.handle),
     normalizeTrackingToken(model?.of_username),
     normalizeTrackingToken(model?.display_name),
     normalizeTrackingToken(model?.name),
@@ -1158,7 +1159,13 @@ function MappingInput({ acc, currentMapping, ofLinks, discovery, onSave }) {
   }, [normalizedLinks, text])
 
   const discoveryMessage = useMemo(() => {
-    const targetSlug = normalizeTrackingToken(acc?.of_username_override || acc?.model?.of_username || acc?.model?.display_name || acc?.model?.name)
+    const targetSlug = normalizeTrackingToken(
+      acc?.of_username_override ||
+      acc?.handle ||
+      acc?.model?.of_username ||
+      acc?.model?.display_name ||
+      acc?.model?.name
+    )
     if (!targetSlug) return null
 
     const connected = (discovery?.connectedAccounts || []).find(account =>

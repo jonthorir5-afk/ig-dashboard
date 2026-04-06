@@ -11,6 +11,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from postgrest.exceptions import APIError
 from supabase import Client as SupabaseClient
 from supabase import create_client
 
@@ -86,17 +87,18 @@ def get_active_reddit_accounts(supabase: SupabaseClient) -> list[dict[str, Any]]
 
 
 def patch_account_scraped_at(supabase: SupabaseClient, account_id: str) -> None:
-    (
-        supabase.table("accounts")
-        .update(
-            {
-                "last_scraped_at": datetime.now(timezone.utc).isoformat(),
-                "data_source": "scraper",
-            }
-        )
-        .eq("id", account_id)
-        .execute()
-    )
+    payload = {
+        "last_scraped_at": datetime.now(timezone.utc).isoformat(),
+        "data_source": "scraper",
+    }
+    try:
+        supabase.table("accounts").update(payload).eq("id", account_id).execute()
+    except APIError as exc:
+        message = str(exc)
+        if "last_scraped_at" not in message:
+            raise
+        logger.warning("accounts.last_scraped_at is missing in Supabase; updating only data_source")
+        supabase.table("accounts").update({"data_source": "scraper"}).eq("id", account_id).execute()
 
 
 def get_snapshot_for_date(supabase: SupabaseClient, account_id: str, snapshot_date: str) -> dict[str, Any] | None:
@@ -123,6 +125,55 @@ def reddit_get_json(session: requests.Session, url: str, params: dict[str, Any] 
     if isinstance(payload, dict) and payload.get("error") == 404:
         return 404, None
     return status_code, payload
+
+
+def fetch_listing_until_cutoff(
+    session: requests.Session,
+    url: str,
+    cutoff_7d: datetime,
+    handle: str,
+) -> list[dict[str, Any]] | None:
+    items: list[dict[str, Any]] = []
+    after: str | None = None
+    page_count = 0
+
+    while True:
+        page_count += 1
+        status, payload = reddit_get_json(
+            session,
+            url,
+            params={"limit": 100, "sort": "new", "after": after},
+        )
+        if status in (403, 404) or payload is None:
+            logger.warning("[%s] %s returned %s", handle, url.rsplit("/", 1)[-1], status)
+            return None
+
+        children = payload.get("data", {}).get("children", [])
+        if not children:
+            break
+
+        hit_cutoff = False
+        for child in children:
+            data = child.get("data", {}) if isinstance(child, dict) else {}
+            created = data.get("created_utc")
+            if created is None:
+                continue
+
+            created_at = datetime.fromtimestamp(float(created), tz=timezone.utc)
+            if created_at < cutoff_7d:
+                hit_cutoff = True
+                break
+
+            items.append(data)
+
+        after = payload.get("data", {}).get("after")
+        if hit_cutoff or not after:
+            break
+
+    if page_count > 1:
+        logger.info("[%s] paginated %s page(s) for %s", handle, page_count, url.rsplit("/", 1)[-1])
+
+    return items
 
 
 def snapshot_payload(account_id: str, snapshot_date: str, metrics: RedditMetrics) -> dict[str, Any]:
@@ -190,17 +241,15 @@ def scrape_reddit_profile(session: requests.Session, handle: str) -> RedditMetri
     karma_total = int(about_data.get("link_karma") or 0) + int(about_data.get("comment_karma") or 0)
     ban_log = "suspended" if about_data.get("is_suspended") else None
 
-    submitted_status, submitted_payload = reddit_get_json(
+    submitted_posts = fetch_listing_until_cutoff(
         session,
         f"https://www.reddit.com/user/{username}/submitted.json",
-        params={"limit": 100, "sort": "new"},
+        cutoff_7d,
+        handle,
     )
-    if submitted_status in (403, 404) or submitted_payload is None:
-        logger.warning("[%s] submitted.json returned %s", handle, submitted_status)
+    if submitted_posts is None:
         return None
 
-    submitted_children = submitted_payload.get("data", {}).get("children", [])
-    submitted_posts = [child.get("data", {}) for child in submitted_children if isinstance(child, dict)]
     posts_7d = []
     posts_1d = []
     top_post_upvotes = 0
@@ -222,26 +271,18 @@ def scrape_reddit_profile(session: requests.Session, handle: str) -> RedditMetri
         if created_at_post >= cutoff_1d:
             posts_1d.append(post)
 
-    if len(posts_7d) == len(submitted_posts) == 100:
-        logger.warning(
-            "[%s] All 100 posts fall within the 7-day window — metrics may be incomplete. Pagination needed for accurate 7d metrics.",
-            handle,
-        )
-
-    comments_status, comments_payload = reddit_get_json(
+    comments = fetch_listing_until_cutoff(
         session,
         f"https://www.reddit.com/user/{username}/comments.json",
-        params={"limit": 100, "sort": "new"},
+        cutoff_7d,
+        handle,
     )
-    if comments_status in (403, 404) or comments_payload is None:
-        logger.warning("[%s] comments.json returned %s", handle, comments_status)
+    if comments is None:
         return None
 
-    comment_children = comments_payload.get("data", {}).get("children", [])
     comments_7d = 0
     comments_1d = 0
-    for child in comment_children:
-        data = child.get("data", {}) if isinstance(child, dict) else {}
+    for data in comments:
         created = data.get("created_utc")
         if created is None:
             continue
