@@ -224,6 +224,19 @@ def scrape_profile(session: requests.Session, handle: str) -> tuple[dict[str, An
     merged_items = list(combined_by_pk.values())
     merged_items.sort(key=lambda media: str(media.get("taken_at") or media.get("taken_at_ts") or ""), reverse=True)
 
+    for index, media in enumerate(merged_items[:12], start=1):
+        logger.info(
+            "[%s] post %s: taken_at=%s media_type=%s product_type=%s play_count=%s likes=%s code=%s",
+            normalized_handle,
+            index,
+            media.get("taken_at"),
+            media.get("media_type"),
+            media.get("product_type"),
+            media.get("play_count"),
+            media.get("like_count"),
+            media.get("code"),
+        )
+
     posts: list[ScrapedPost] = []
     for media in merged_items[:12]:
         shortcode = media.get("code")
