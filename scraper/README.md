@@ -3,7 +3,8 @@
 This folder contains a standalone Python scraper that replaces the Apify Instagram actor for the dashboard.
 
 It uses:
-- HikerAPI for Instagram scraping
+- RocketAPI for Instagram scraping
+- Reddit public JSON endpoints for Reddit scraping
 - Supabase service-role access for database writes
 
 ## What it writes
@@ -17,7 +18,8 @@ It also marks each managed Instagram account in `public.accounts` with `data_sou
 
 ## Files
 
-- `scrape.py` — main scraper entrypoint
+- `scrape.py` — Instagram scraper entrypoint
+- `scrape_reddit.py` — Reddit scraper entrypoint
 - `requirements.txt` — pinned Python dependencies
 - `.env.example` — environment variable template
 
@@ -57,7 +59,7 @@ cp .env.example .env
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
-- `HIKERAPI_KEY`
+- `ROCKETAPI_KEY`
 
 ## Run manually
 
@@ -65,6 +67,14 @@ cp .env.example .env
 cd scraper
 source .venv/bin/activate
 python scrape.py
+```
+
+For Reddit:
+
+```bash
+cd scraper
+source .venv/bin/activate
+python scrape_reddit.py
 ```
 
 ## Output behavior
@@ -91,8 +101,15 @@ Add a job like this:
 
 This runs the scraper at the top of every hour and appends logs to `/var/log/ig-scraper.log`.
 
+Example Reddit daily job:
+
+```cron
+0 1 * * * cd /path/to/ig-dashboard/scraper && /path/to/ig-dashboard/scraper/.venv/bin/python scrape_reddit.py >> /var/log/reddit-scraper.log 2>&1
+```
+
 ## Operational notes
 
 - Use the Supabase **service role** key, not the anon key.
-- HikerAPI handles the Instagram scraping layer, so no local sessions, burner accounts, or proxy setup are needed here.
+- RocketAPI handles the Instagram scraping layer, so no local sessions, burner accounts, or proxy setup are needed here.
+- Reddit scraping uses public JSON endpoints plus the `over18` cookie opt-in and does not require Reddit credentials.
 - The script sleeps 1 second between accounts.

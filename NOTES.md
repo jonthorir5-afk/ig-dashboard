@@ -43,3 +43,26 @@ RocketAPI via the `get_media` endpoint is the working solution for Instagram pla
 ### What is NOT possible externally
 
 Reach, impressions, profile visits, and story views are gated behind Instagram's official Graph API and require account-owner authentication. No external scraper can reliably access these for any account.
+
+## Reddit dashboard metrics — needs client clarification
+
+The client's stated metrics are:
+"number of posts, upvotes per day, upvotes per week, average upvotes per day/week, replies"
+
+Before building the Reddit tab UI, confirm with the client:
+
+1. "Number of posts" — does this mean:
+   - Total posts ever made (lifetime)?
+   - Posts per 1d / 7d / 30d / 90d time window?
+   - Both?
+
+2. "Replies" — does this mean:
+   - Comments received on their posts?
+   - Comments they wrote themselves?
+   - Both?
+
+3. Total accumulated karma since account creation, or karma earned in last 7/30 days only?
+
+4. Does he need 30d and 90d windows, or just 1d and 7d?
+
+Note: Reddit's public API gives us reliable access to profile karma, submissions, comment activity, post scores, and subreddit posting history. It does not directly provide a clean "comments received on posts" metric without extra thread-level scraping, so that specific definition needs to be agreed before building the UI around it.

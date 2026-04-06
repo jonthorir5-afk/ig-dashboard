@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import random
 import sys
 import time
 from dataclasses import dataclass
@@ -18,8 +17,9 @@ from supabase import create_client
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
-USER_AGENT = "ig-dashboard-scraper/1.0"
-REQUEST_DELAY_SECONDS = 2.0
+HEADERS = {"User-Agent": "ig-dashboard/1.0 analytics scraper"}
+COOKIES = {"over18": "1", "_options": "%7B%22pref_quarantine_optin%22%3A%20true%7D"}
+ACCOUNT_DELAY_SECONDS = 2.0
 
 
 logging.basicConfig(
@@ -31,36 +31,19 @@ logger = logging.getLogger("reddit-scraper")
 
 
 @dataclass
-class RedditSubmission:
-    created_at: datetime
-    score: int
-    subreddit: str
-
-
-@dataclass
-class RedditComment:
-    created_at: datetime
-
-
-@dataclass
-class RedditProfileMetrics:
+class RedditMetrics:
     karma_total: int
     account_age_days: int
     posts_1d: int
     posts_7d: int
     upvotes_1d: int
     upvotes_7d: int
-    avg_upvotes_1d: int
     avg_upvotes_7d: int
     top_post_upvotes: int
     subreddits_posted_7d: int
     comments_received_1d: int
     comments_received_7d: int
     ban_log: str | None
-
-
-class RedditUserNotFoundError(RuntimeError):
-    pass
 
 
 def env_required(name: str) -> str:
@@ -71,18 +54,17 @@ def env_required(name: str) -> str:
 
 
 def build_supabase() -> SupabaseClient:
-    url = env_required("SUPABASE_URL")
-    key = env_required("SUPABASE_SERVICE_KEY")
-    return create_client(url, key)
+    return create_client(env_required("SUPABASE_URL"), env_required("SUPABASE_SERVICE_KEY"))
 
 
 def build_http_session() -> requests.Session:
     session = requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session.headers.update(HEADERS)
+    session.cookies.update(COOKIES)
     return session
 
 
-def normalize_reddit_handle(handle: str) -> str:
+def normalize_handle(handle: str) -> str:
     normalized = handle.strip().strip("/")
     if normalized.startswith("@"):
         normalized = normalized[1:]
@@ -94,13 +76,27 @@ def normalize_reddit_handle(handle: str) -> str:
 def get_active_reddit_accounts(supabase: SupabaseClient) -> list[dict[str, Any]]:
     response = (
         supabase.table("accounts")
-        .select("id, handle, platform, data_source, status")
+        .select("id,handle")
         .eq("platform", "reddit")
         .eq("status", "Active")
         .order("created_at", desc=False)
         .execute()
     )
     return response.data or []
+
+
+def patch_account_scraped_at(supabase: SupabaseClient, account_id: str) -> None:
+    (
+        supabase.table("accounts")
+        .update(
+            {
+                "last_scraped_at": datetime.now(timezone.utc).isoformat(),
+                "data_source": "scraper",
+            }
+        )
+        .eq("id", account_id)
+        .execute()
+    )
 
 
 def get_snapshot_for_date(supabase: SupabaseClient, account_id: str, snapshot_date: str) -> dict[str, Any] | None:
@@ -112,188 +108,24 @@ def get_snapshot_for_date(supabase: SupabaseClient, account_id: str, snapshot_da
         .limit(1)
         .execute()
     )
-    data = response.data or []
-    return data[0] if data else None
+    rows = response.data or []
+    return rows[0] if rows else None
 
 
-def update_account_source(supabase: SupabaseClient, account_id: str) -> None:
-    (
-        supabase.table("accounts")
-        .update({"data_source": "scraper"})
-        .eq("id", account_id)
-        .execute()
-    )
+def reddit_get_json(session: requests.Session, url: str, params: dict[str, Any] | None = None) -> tuple[int, dict[str, Any] | None]:
+    response = session.get(url, params=params, timeout=30)
+    status_code = response.status_code
+    if status_code in (403, 404):
+        return status_code, None
+
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and payload.get("error") == 404:
+        return 404, None
+    return status_code, payload
 
 
-class RedditJsonClient:
-    def __init__(self, session: requests.Session) -> None:
-        self.session = session
-        self._last_request_started_at: float | None = None
-
-    def get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        if self._last_request_started_at is not None:
-            elapsed = time.monotonic() - self._last_request_started_at
-            remaining = REQUEST_DELAY_SECONDS - elapsed
-            if remaining > 0:
-                time.sleep(remaining)
-
-        self._last_request_started_at = time.monotonic()
-        response = self.session.get(url, params=params, timeout=30)
-
-        if response.status_code == 404:
-            raise RedditUserNotFoundError("reddit account not found or suspended")
-        if response.status_code != 200:
-            raise RuntimeError(f"Reddit returned HTTP {response.status_code} for {response.url}")
-
-        payload = response.json()
-        if payload.get("error") == 404:
-            raise RedditUserNotFoundError("reddit account not found or suspended")
-        return payload
-
-
-def iter_recent_submissions(client: RedditJsonClient, username: str, cutoff_7d: datetime) -> list[RedditSubmission]:
-    submissions: list[RedditSubmission] = []
-    after: str | None = None
-
-    while True:
-        payload = client.get_json(
-            f"https://www.reddit.com/user/{username}/submitted.json",
-            params={"limit": 100, "sort": "new", "after": after},
-        )
-        children = payload.get("data", {}).get("children", [])
-        if not children:
-            break
-
-        hit_cutoff = False
-        for child in children:
-            data = child.get("data", {})
-            created_utc = data.get("created_utc")
-            if created_utc is None:
-                continue
-
-            created_at = datetime.fromtimestamp(float(created_utc), tz=timezone.utc)
-            if created_at < cutoff_7d:
-                hit_cutoff = True
-                break
-
-            submissions.append(
-                RedditSubmission(
-                    created_at=created_at,
-                    score=int(data.get("score") or 0),
-                    subreddit=str(data.get("subreddit") or ""),
-                )
-            )
-
-        if hit_cutoff:
-            break
-
-        after = payload.get("data", {}).get("after")
-        if not after:
-            break
-
-    return submissions
-
-
-def iter_recent_comments(client: RedditJsonClient, username: str, cutoff_7d: datetime) -> list[RedditComment]:
-    comments: list[RedditComment] = []
-    after: str | None = None
-
-    while True:
-        payload = client.get_json(
-            f"https://www.reddit.com/user/{username}/comments.json",
-            params={"limit": 100, "sort": "new", "after": after},
-        )
-        children = payload.get("data", {}).get("children", [])
-        if not children:
-            break
-
-        hit_cutoff = False
-        for child in children:
-            data = child.get("data", {})
-            created_utc = data.get("created_utc")
-            if created_utc is None:
-                continue
-
-            created_at = datetime.fromtimestamp(float(created_utc), tz=timezone.utc)
-            if created_at < cutoff_7d:
-                hit_cutoff = True
-                break
-
-            comments.append(RedditComment(created_at=created_at))
-
-        if hit_cutoff:
-            break
-
-        after = payload.get("data", {}).get("after")
-        if not after:
-            break
-
-    return comments
-
-
-def zero_metrics(ban_log: str | None = None) -> RedditProfileMetrics:
-    return RedditProfileMetrics(
-        karma_total=0,
-        account_age_days=0,
-        posts_1d=0,
-        posts_7d=0,
-        upvotes_1d=0,
-        upvotes_7d=0,
-        avg_upvotes_1d=0,
-        avg_upvotes_7d=0,
-        top_post_upvotes=0,
-        subreddits_posted_7d=0,
-        comments_received_1d=0,
-        comments_received_7d=0,
-        ban_log=ban_log,
-    )
-
-
-def scrape_reddit_profile(client: RedditJsonClient, handle: str) -> RedditProfileMetrics:
-    username = normalize_reddit_handle(handle)
-    about = client.get_json(f"https://www.reddit.com/user/{username}/about.json")
-    about_data = about.get("data", {})
-
-    now_utc = datetime.now(timezone.utc)
-    cutoff_1d = now_utc - timedelta(days=1)
-    cutoff_7d = now_utc - timedelta(days=7)
-
-    created_utc = float(about_data.get("created_utc") or 0)
-    created_at = datetime.fromtimestamp(created_utc, tz=timezone.utc) if created_utc else now_utc
-
-    submissions = iter_recent_submissions(client, username, cutoff_7d)
-    comments = iter_recent_comments(client, username, cutoff_7d)
-
-    submissions_1d = [item for item in submissions if item.created_at >= cutoff_1d]
-    comments_1d = [item for item in comments if item.created_at >= cutoff_1d]
-
-    rd_posts_1d = len(submissions_1d)
-    rd_posts_7d = len(submissions)
-    rd_upvotes_1d = sum(item.score for item in submissions_1d)
-    rd_upvotes_7d = sum(item.score for item in submissions)
-    rd_avg_upvotes_1d = int(rd_upvotes_1d / rd_posts_1d) if rd_posts_1d > 0 else 0
-    rd_avg_upvotes_7d = int(rd_upvotes_7d / rd_posts_7d) if rd_posts_7d > 0 else 0
-    rd_top_post_upvotes = max((item.score for item in submissions), default=0)
-    rd_subreddits_posted_7d = len({item.subreddit for item in submissions if item.subreddit})
-
-    return RedditProfileMetrics(
-        karma_total=int(about_data.get("link_karma") or 0) + int(about_data.get("comment_karma") or 0),
-        account_age_days=max(int((now_utc - created_at).total_seconds() / 86400), 0),
-        posts_1d=rd_posts_1d,
-        posts_7d=rd_posts_7d,
-        upvotes_1d=rd_upvotes_1d,
-        upvotes_7d=rd_upvotes_7d,
-        avg_upvotes_1d=rd_avg_upvotes_1d,
-        avg_upvotes_7d=rd_avg_upvotes_7d,
-        top_post_upvotes=rd_top_post_upvotes,
-        subreddits_posted_7d=rd_subreddits_posted_7d,
-        comments_received_1d=len(comments_1d),
-        comments_received_7d=len(comments),
-        ban_log=None,
-    )
-
-
-def snapshot_payload(account_id: str, snapshot_date: str, metrics: RedditProfileMetrics) -> dict[str, Any]:
+def snapshot_payload(account_id: str, snapshot_date: str, metrics: RedditMetrics) -> dict[str, Any]:
     return {
         "account_id": account_id,
         "snapshot_date": snapshot_date,
@@ -303,100 +135,190 @@ def snapshot_payload(account_id: str, snapshot_date: str, metrics: RedditProfile
         "rd_posts_7d": metrics.posts_7d,
         "rd_upvotes_1d": metrics.upvotes_1d,
         "rd_upvotes_7d": metrics.upvotes_7d,
-        "rd_avg_upvotes_1d": metrics.avg_upvotes_1d,
         "rd_avg_upvotes_7d": metrics.avg_upvotes_7d,
         "rd_top_post_upvotes": metrics.top_post_upvotes,
         "rd_subreddits_posted_7d": metrics.subreddits_posted_7d,
         "rd_comments_received_1d": metrics.comments_received_1d,
         "rd_comments_received_7d": metrics.comments_received_7d,
         "rd_ban_log": metrics.ban_log,
-        "captured_by": "reddit-json",
+        "captured_by": "reddit_public_api",
     }
 
 
-def insert_snapshot(
-    supabase: SupabaseClient,
-    account_id: str,
-    snapshot_date: str,
-    metrics: RedditProfileMetrics,
-) -> str:
-    response = supabase.table("snapshots").insert(snapshot_payload(account_id, snapshot_date, metrics)).execute()
-    if not response.data:
-        raise RuntimeError(f"Snapshot insert returned no rows for account_id={account_id}")
-    return response.data[0]["id"]
+def upsert_snapshot(supabase: SupabaseClient, account_id: str, snapshot_date: str, metrics: RedditMetrics) -> None:
+    payload = snapshot_payload(account_id, snapshot_date, metrics)
+    existing = get_snapshot_for_date(supabase, account_id, snapshot_date)
+    if existing:
+        supabase.table("snapshots").update(payload).eq("id", existing["id"]).execute()
+    else:
+        supabase.table("snapshots").insert(payload).execute()
 
 
-def update_snapshot(supabase: SupabaseClient, snapshot_id: str, account_id: str, snapshot_date: str, metrics: RedditProfileMetrics) -> None:
-    supabase.table("snapshots").update(snapshot_payload(account_id, snapshot_date, metrics)).eq("id", snapshot_id).execute()
+def zero_metrics(ban_log: str | None = None) -> RedditMetrics:
+    return RedditMetrics(
+        karma_total=0,
+        account_age_days=0,
+        posts_1d=0,
+        posts_7d=0,
+        upvotes_1d=0,
+        upvotes_7d=0,
+        avg_upvotes_7d=0,
+        top_post_upvotes=0,
+        subreddits_posted_7d=0,
+        comments_received_1d=0,
+        comments_received_7d=0,
+        ban_log=ban_log,
+    )
 
 
-def process_account(client: RedditJsonClient, supabase: SupabaseClient, account: dict[str, Any], snapshot_date: str) -> None:
+def scrape_reddit_profile(session: requests.Session, handle: str) -> RedditMetrics | None:
+    username = normalize_handle(handle)
+    now_utc = datetime.now(timezone.utc)
+    cutoff_1d = now_utc - timedelta(days=1)
+    cutoff_7d = now_utc - timedelta(days=7)
+
+    about_status, about_payload = reddit_get_json(session, f"https://www.reddit.com/user/{username}/about.json")
+    if about_status in (403, 404) or about_payload is None:
+        logger.warning("[%s] about.json returned %s", handle, about_status)
+        if about_status == 404:
+            return zero_metrics("suspended")
+        return None
+
+    about_data = about_payload.get("data", {})
+    created_utc = float(about_data.get("created_utc") or 0)
+    created_at = datetime.fromtimestamp(created_utc, tz=timezone.utc) if created_utc else now_utc
+    karma_total = int(about_data.get("link_karma") or 0) + int(about_data.get("comment_karma") or 0)
+    ban_log = "suspended" if about_data.get("is_suspended") else None
+
+    submitted_status, submitted_payload = reddit_get_json(
+        session,
+        f"https://www.reddit.com/user/{username}/submitted.json",
+        params={"limit": 100, "sort": "new"},
+    )
+    if submitted_status in (403, 404) or submitted_payload is None:
+        logger.warning("[%s] submitted.json returned %s", handle, submitted_status)
+        return None
+
+    submitted_children = submitted_payload.get("data", {}).get("children", [])
+    submitted_posts = [child.get("data", {}) for child in submitted_children if isinstance(child, dict)]
+    posts_7d = []
+    posts_1d = []
+    top_post_upvotes = 0
+    subreddits_7d: set[str] = set()
+
+    for post in submitted_posts:
+        created = post.get("created_utc")
+        score = int(post.get("score") or 0)
+        subreddit = str(post.get("subreddit") or "")
+        top_post_upvotes = max(top_post_upvotes, score)
+        if created is None:
+            continue
+
+        created_at_post = datetime.fromtimestamp(float(created), tz=timezone.utc)
+        if created_at_post >= cutoff_7d:
+            posts_7d.append(post)
+            if subreddit:
+                subreddits_7d.add(subreddit)
+        if created_at_post >= cutoff_1d:
+            posts_1d.append(post)
+
+    if len(posts_7d) == len(submitted_posts) == 100:
+        logger.warning(
+            "[%s] All 100 posts fall within the 7-day window — metrics may be incomplete. Pagination needed for accurate 7d metrics.",
+            handle,
+        )
+
+    comments_status, comments_payload = reddit_get_json(
+        session,
+        f"https://www.reddit.com/user/{username}/comments.json",
+        params={"limit": 100, "sort": "new"},
+    )
+    if comments_status in (403, 404) or comments_payload is None:
+        logger.warning("[%s] comments.json returned %s", handle, comments_status)
+        return None
+
+    comment_children = comments_payload.get("data", {}).get("children", [])
+    comments_7d = 0
+    comments_1d = 0
+    for child in comment_children:
+        data = child.get("data", {}) if isinstance(child, dict) else {}
+        created = data.get("created_utc")
+        if created is None:
+            continue
+        created_at_comment = datetime.fromtimestamp(float(created), tz=timezone.utc)
+        if created_at_comment >= cutoff_7d:
+            comments_7d += 1
+        if created_at_comment >= cutoff_1d:
+            comments_1d += 1
+
+    upvotes_7d = sum(int(post.get("score") or 0) for post in posts_7d)
+    upvotes_1d = sum(int(post.get("score") or 0) for post in posts_1d)
+
+    return RedditMetrics(
+        karma_total=karma_total,
+        account_age_days=max(int((now_utc - created_at).total_seconds() // 86400), 0),
+        posts_1d=len(posts_1d),
+        posts_7d=len(posts_7d),
+        upvotes_1d=upvotes_1d,
+        upvotes_7d=upvotes_7d,
+        avg_upvotes_7d=int(upvotes_7d / len(posts_7d)) if posts_7d else 0,
+        top_post_upvotes=top_post_upvotes,
+        subreddits_posted_7d=len(subreddits_7d),
+        comments_received_1d=comments_1d,
+        comments_received_7d=comments_7d,
+        ban_log=ban_log,
+    )
+
+
+def process_account(supabase: SupabaseClient, session: requests.Session, account: dict[str, Any], snapshot_date: str) -> None:
+    handle = normalize_handle(account["handle"])
     account_id = account["id"]
-    handle = account["handle"]
+    patch_account_scraped_at(supabase, account_id)
 
-    try:
-        update_account_source(supabase, account_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("[%s] failed to mark account data_source as scraper: %s", handle, exc)
-
-    existing_snapshot = get_snapshot_for_date(supabase, account_id, snapshot_date)
-    if existing_snapshot:
-        logger.info("[%s] snapshot already exists for %s; refreshing snapshot fields", handle, snapshot_date)
-
-    try:
-        metrics = scrape_reddit_profile(client, handle)
-    except RedditUserNotFoundError:
-        logger.warning("[%s] reddit account not found or suspended; marking snapshot accordingly", handle)
-        metrics = zero_metrics(ban_log="suspended")
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("[%s] scrape failed: %s", handle, exc)
+    metrics = scrape_reddit_profile(session, handle)
+    if metrics is None:
         return
 
-    try:
-        if existing_snapshot:
-            update_snapshot(supabase, existing_snapshot["id"], account_id, snapshot_date, metrics)
-        else:
-            insert_snapshot(supabase, account_id, snapshot_date, metrics)
-        logger.info(
-            "[%s] success | karma=%s posts_1d=%s posts_7d=%s upvotes_7d=%s comments_7d=%s ban_log=%s",
-            handle,
-            metrics.karma_total,
-            metrics.posts_1d,
-            metrics.posts_7d,
-            metrics.upvotes_7d,
-            metrics.comments_received_7d,
-            metrics.ban_log,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("[%s] database write failed: %s", handle, exc)
+    upsert_snapshot(supabase, account_id, snapshot_date, metrics)
+    logger.info(
+        "[%s] success | karma=%s posts_7d=%s upvotes_7d=%s comments_7d=%s",
+        handle,
+        metrics.karma_total,
+        metrics.posts_7d,
+        metrics.upvotes_7d,
+        metrics.comments_received_7d,
+    )
 
 
-def main() -> int:
-    load_dotenv(ENV_PATH if ENV_PATH.exists() else None)
-
-    try:
-        supabase = build_supabase()
-        reddit = RedditJsonClient(build_http_session())
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Startup failed: %s", exc)
-        return 1
-
+def main() -> None:
+    load_dotenv(ENV_PATH)
+    supabase = build_supabase()
+    session = build_http_session()
     snapshot_date = datetime.now(timezone.utc).date().isoformat()
+
     accounts = get_active_reddit_accounts(supabase)
     logger.info("Found %s active Reddit account(s)", len(accounts))
 
     for index, account in enumerate(accounts, start=1):
-        logger.info("Processing %s/%s: %s", index, len(accounts), account["handle"])
-        process_account(reddit, supabase, account, snapshot_date)
+        handle = normalize_handle(account["handle"])
+        logger.info("Processing %s/%s: u/%s", index, len(accounts), handle)
+        try:
+            process_account(supabase, session, account, snapshot_date)
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else "unknown"
+            if status_code in (403, 404):
+                logger.warning("[u/%s] reddit returned %s; skipping", handle, status_code)
+            else:
+                logger.exception("[u/%s] request failed: %s", handle, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[u/%s] unexpected failure: %s", handle, exc)
 
         if index < len(accounts):
-            delay_seconds = random.uniform(2, 4)
-            logger.info("Sleeping %.2f seconds before next account", delay_seconds)
-            time.sleep(delay_seconds)
+            logger.info("Sleeping %.2f seconds before next account", ACCOUNT_DELAY_SECONDS)
+            time.sleep(ACCOUNT_DELAY_SECONDS)
 
     logger.info("Run complete")
-    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
