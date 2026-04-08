@@ -1,0 +1,16 @@
+[Unit]
+Description=IG Dashboard Reddit Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/ig-dashboard/scraper
+EnvironmentFile=/opt/ig-dashboard/scraper/.env
+ExecStart=/opt/ig-dashboard/scraper/.venv/bin/python /opt/ig-dashboard/scraper/scrape_reddit.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

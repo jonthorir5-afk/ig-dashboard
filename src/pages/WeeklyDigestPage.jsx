@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Download, Printer, Calendar, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
 import { getAccounts, getAllSnapshotHistory, getLatestSnapshots } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade, exportToCSV } from '../lib/metrics'
+import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
 export default function WeeklyDigestPage() {
@@ -129,7 +130,15 @@ export default function WeeklyDigestPage() {
       dateMap[s.snapshot_date].views += getSnapshotViews(s)
       dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
     }
-    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+    return fillDailySeries(
+      Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)),
+      {
+        keys: ['views', 'clicks'],
+        startDate: weekRange.start,
+        endDate: weekRange.end,
+        treatAllZeroRowAsMissing: true,
+      }
+    )
   }, [snapshots, weekRange])
 
   if (loading) return <div className="flex-center" style={{ height: '60vh' }}><div className="loader" /></div>
@@ -169,19 +178,17 @@ export default function WeeklyDigestPage() {
       </div>
 
       {/* Trend chart */}
-      {dailyTrend.length > 1 && (
-        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Daily Views & Clicks</h3>
-          <TrendChart
-            data={dailyTrend}
-            lines={[
-              { key: 'views', label: 'Views', color: COLORS.primary },
-              { key: 'clicks', label: 'Clicks', color: COLORS.warning },
-            ]}
-            height={220}
-          />
-        </div>
-      )}
+      <div className="glass-panel" style={{ padding: '1.25rem' }}>
+        <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Daily Views & Clicks</h3>
+        <TrendChart
+          data={dailyTrend}
+          lines={[
+            { key: 'views', label: 'Views', color: COLORS.primary },
+            { key: 'clicks', label: 'Clicks', color: COLORS.warning },
+          ]}
+          height={220}
+        />
+      </div>
 
       {/* Model Breakdown */}
       <div className="glass-panel" style={{ padding: '1.25rem' }}>

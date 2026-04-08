@@ -1,0 +1,10 @@
+[Unit]
+Description=Run IG Dashboard Reddit scraper daily
+
+[Timer]
+OnCalendar=*-*-* 06:15:00
+Persistent=true
+Unit=reddit-scraper.service
+
+[Install]
+WantedBy=timers.target

@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Globe } from 'lucide-react'
 import { getModel, getAccounts, getSnapshotHistory, getOFTracking } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
+import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, AreaTrendChart, COLORS } from '../components/charts/TrendChart'
 import Sparkline from '../components/charts/Sparkline'
 import HeatmapGrid, { vtfrColorScale, viewsColorScale } from '../components/charts/HeatmapGrid'
@@ -121,7 +122,13 @@ export default function ModelDetailPage() {
       dateMap[s.snapshot_date].views += getSnapshotViews(s)
       dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
     }
-    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+    return fillDailySeries(
+      Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)),
+      {
+        keys: ['followers', 'views', 'clicks'],
+        treatAllZeroRowAsMissing: true,
+      }
+    )
   }, [snapshots])
 
   // Per-account sparkline data
@@ -355,25 +362,23 @@ export default function ModelDetailPage() {
       ))}
 
       {/* Trend Charts */}
-      {trendData.length > 1 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Follower Growth</h3>
-            <AreaTrendChart data={trendData} dataKey="followers" label="Followers" color={COLORS.success} height={220} />
-          </div>
-          <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Views & Clicks</h3>
-            <TrendChart
-              data={trendData}
-              lines={[
-                { key: 'views', label: 'Views', color: COLORS.primary },
-                { key: 'clicks', label: 'Clicks', color: COLORS.warning },
-              ]}
-              height={220}
-            />
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Follower Growth</h3>
+          <AreaTrendChart data={trendData} dataKey="followers" label="Followers" color={COLORS.success} height={220} />
         </div>
-      )}
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Views & Clicks</h3>
+          <TrendChart
+            data={trendData}
+            lines={[
+              { key: 'views', label: 'Views', color: COLORS.primary },
+              { key: 'clicks', label: 'Clicks', color: COLORS.warning },
+            ]}
+            height={220}
+          />
+        </div>
+      </div>
 
       {/* Weekly heatmap */}
       {weeklyHeatmap.rows.length > 0 && (

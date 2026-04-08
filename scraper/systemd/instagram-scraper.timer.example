@@ -1,0 +1,10 @@
+[Unit]
+Description=Run IG Dashboard Instagram scraper daily
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=instagram-scraper.service
+
+[Install]
+WantedBy=timers.target

@@ -4,6 +4,7 @@ import { Download, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { getAccounts, getLatestSnapshots, getAllSnapshotHistory, getLatestOFTracking, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
 import { getDisplayHandle, getAccountProfileUrl } from '../lib/accountDisplay'
+import { fillDailySeries } from '../lib/timeSeries'
 import Sparkline from '../components/charts/Sparkline'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 
@@ -180,17 +181,25 @@ export default function PlatformPage() {
       dateMap[s.snapshot_date].redditUpvotes += s.rd_upvotes_7d || 0
       dateMap[s.snapshot_date].redditReplies += s.rd_comments_received_7d || 0
     }
-    return Object.values(dateMap)
+    const rows = Object.values(dateMap)
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(row => {
         const redditActivity = row.redditPosts + row.redditUpvotes + row.redditReplies
         return {
           date: row.date,
-          views: selectedPlatform === 'instagram' && row.views === 0 ? null : row.views,
+          views: row.views,
           followers: row.followers,
-          activity: selectedPlatform === 'reddit' && redditActivity === 0 ? null : redditActivity,
+          activity: redditActivity,
         }
       })
+    return fillDailySeries(rows, {
+      keys: ['views', 'followers', 'activity'],
+      zeroIsMissingKeys: selectedPlatform === 'instagram' ? ['views'] : [],
+      treatAllZeroRowAsMissing: true,
+    }).map(row => ({
+      ...row,
+      activity: selectedPlatform === 'reddit' && row.activity === 0 ? null : row.activity,
+    }))
   }, [history, selectedPlatform])
 
   const latestSnapshotDate = useMemo(() => {

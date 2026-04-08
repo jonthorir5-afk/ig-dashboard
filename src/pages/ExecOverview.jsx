@@ -4,6 +4,7 @@ import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown,
 import { getExecOverview, getAllSnapshotHistory, getLinkMappings } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
+import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 import BarChartComponent from '../components/charts/BarChart'
 
@@ -226,7 +227,13 @@ export default function ExecOverview() {
       dateMap[s.snapshot_date].views += getSnapshotViews(s)
       dateMap[s.snapshot_date].clicks += getSnapshotClicks(s)
     }
-    return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+    return fillDailySeries(
+      Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)),
+      {
+        keys: ['followers', 'views', 'clicks'],
+        treatAllZeroRowAsMissing: true,
+      }
+    )
   }, [history])
 
   // Model bar chart data
@@ -463,29 +470,27 @@ export default function ExecOverview() {
       )}
 
       {/* Trend Charts */}
-      {dailyTrend.length > 1 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Network Views & Clicks (30d)</h3>
-            <TrendChart
-              data={dailyTrend}
-              lines={[
-                { key: 'views', label: 'Views', color: COLORS.primary },
-                { key: 'clicks', label: 'Clicks', color: COLORS.warning },
-              ]}
-              height={240}
-            />
-          </div>
-          <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Total Followers (30d)</h3>
-            <TrendChart
-              data={dailyTrend}
-              lines={[{ key: 'followers', label: 'Followers', color: COLORS.success }]}
-              height={240}
-            />
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Network Views & Clicks (30d)</h3>
+          <TrendChart
+            data={dailyTrend}
+            lines={[
+              { key: 'views', label: 'Views', color: COLORS.primary },
+              { key: 'clicks', label: 'Clicks', color: COLORS.warning },
+            ]}
+            height={240}
+          />
         </div>
-      )}
+        <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>Total Followers (30d)</h3>
+          <TrendChart
+            data={dailyTrend}
+            lines={[{ key: 'followers', label: 'Followers', color: COLORS.success }]}
+            height={240}
+          />
+        </div>
+      </div>
 
       {/* Model Reach Comparison */}
       {modelBarData.length > 0 && (
