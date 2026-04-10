@@ -11,6 +11,23 @@ const APIFY_TOKEN = process.env.APIFY_TOKEN
 const OF_API_KEY = process.env.ONLYFANS_API_KEY
 const OF_API_BASE = 'https://app.onlyfansapi.com/api'
 
+function buildTwitterFollowerUpdate(metrics) {
+  const update = {
+    captured_by: 'API-Twitter',
+  }
+
+  if (metrics.like_count != null) update.tw_likes_7d = metrics.like_count
+  if (metrics.followers_count != null) update.followers = metrics.followers_count
+  if (metrics.following_count != null) update.following = metrics.following_count
+
+  const noteBits = []
+  if (metrics.tweet_count != null) noteBits.push(`Tweets: ${metrics.tweet_count}`)
+  if (metrics.listed_count != null) noteBits.push(`Listed: ${metrics.listed_count}`)
+  if (noteBits.length) update.notes = `Auto-synced (scheduled). ${noteBits.join(', ')}`
+
+  return update
+}
+
 // ── Twitter Views Sync (via Apify) ──
 async function syncTwitterViews() {
   if (!APIFY_TOKEN) return { synced: 0, errors: ['APIFY_TOKEN not configured'] }
@@ -180,7 +197,7 @@ async function syncTwitter() {
   if (!accounts.length) return { synced: 0, errors: [] }
 
   const today = new Date().toISOString().split('T')[0]
-  const results = { synced: 0, errors: [] }
+  const results = { synced: 0, skipped: 0, errors: [] }
 
   for (let i = 0; i < accounts.length; i += 100) {
     const batch = accounts.slice(i, i + 100)
@@ -192,23 +209,46 @@ async function syncTwitter() {
       )
       if (!res.ok) { results.errors.push(`Twitter API ${res.status}`); continue }
       const json = await res.json()
+      const twitterErrors = json.errors || []
+      const matchedHandles = new Set()
+
+      for (const err of twitterErrors) {
+        results.errors.push(`@${err.value}: ${err.detail}`)
+        results.skipped++
+      }
+
       for (const tUser of (json.data || [])) {
         const account = batch.find(a => a.handle.replace('@', '').toLowerCase() === tUser.username.toLowerCase())
         if (!account) continue
-        const metrics = tUser.public_metrics || {}
-        const snapshot = {
-          account_id: account.id, snapshot_date: today,
-          followers: metrics.followers_count || 0, following: metrics.following_count || 0,
-          tw_likes_7d: metrics.like_count || 0, captured_by: 'API-Twitter',
-          notes: `Auto-synced (scheduled). Tweets: ${metrics.tweet_count || 0}`,
+        matchedHandles.add(account.handle.replace('@', '').toLowerCase())
+        const metrics = tUser.public_metrics
+        if (!metrics || (metrics.followers_count == null && metrics.following_count == null && metrics.like_count == null)) {
+          results.errors.push(`@${tUser.username}: missing public_metrics; preserved previous snapshot values`)
+          results.skipped++
+          continue
         }
+
+        const snapshot = buildTwitterFollowerUpdate(metrics)
         const { data: existing } = await supabase.from('snapshots').select('id').eq('account_id', account.id).eq('snapshot_date', today).limit(1)
         if (existing?.length) {
           await supabase.from('snapshots').update(snapshot).eq('id', existing[0].id)
         } else {
-          await supabase.from('snapshots').insert(snapshot)
+          if (snapshot.followers == null && snapshot.following == null) {
+            results.errors.push(`@${tUser.username}: follower metrics unavailable for new snapshot; skipped insert to avoid zero overwrite`)
+            results.skipped++
+            continue
+          }
+          await supabase.from('snapshots').insert({ account_id: account.id, snapshot_date: today, ...snapshot })
         }
         results.synced++
+      }
+
+      for (const account of batch) {
+        const normalizedHandle = account.handle.replace('@', '').toLowerCase()
+        if (!matchedHandles.has(normalizedHandle) && !twitterErrors.some(err => (err.value || '').toLowerCase() === normalizedHandle)) {
+          results.errors.push(`@${normalizedHandle}: no user payload returned; preserved previous snapshot values`)
+          results.skipped++
+        }
       }
     } catch (err) { results.errors.push(err.message) }
   }
