@@ -8,7 +8,7 @@
 - Instagram sync blocker: Apify is returning `usage_exceeded` for some Instagram follower-count runs. Increase Apify usage / credits / actor access first, then resume testing the Instagram follower sync flow.
 - Instagram follow-up: Apify and Netlify credits were increased on 2026-04-02, so the Instagram follower sync flow should be re-tested and stabilized next.
 - Meta Instagram auth follow-up: the new Meta-backed Instagram connection flow is scaffolded, but Instagram OAuth is still failing on Instagram's side with `Sorry, this page isn't available` before the callback is reached. Redirect URI appears correct, so the next likely blockers are Meta app/use-case configuration or the requested scope. Resume by testing with `META_INSTAGRAM_SCOPES=instagram_business_basic` and re-checking the Meta Instagram Login setup.
-- VPS follow-up: move the new `scraper/` Instagram pipeline onto a small always-on VPS later so the daily RocketAPI run does not depend on a local Mac staying awake. When doing this, also add the scraper `.env`, cron job, and logs directory.
+- VPS follow-up: move the new `scraper/` Instagram + Reddit pipelines onto a small always-on DigitalOcean VPS later so the daily runs do not depend on a local Mac staying awake. When doing this, also add the scraper `.env`, `systemd` timers, and logs directory.
 
 ## Instagram Conclusion: RocketAPI works for play counts on NSFW accounts
 

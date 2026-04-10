@@ -86,24 +86,52 @@ The script logs to stdout with timestamps and will report:
 - per-account skips when today's snapshot already exists
 - per-account DB write failures
 
-## Hetzner VPS setup
+## DigitalOcean VPS setup
 
 Recommended target:
 
-- small Hetzner cloud VPS
+- DigitalOcean Droplet
 - Ubuntu 24.04 LTS
+- Basic shared CPU plan with 2 GB RAM
+- SSH key auth enabled during Droplet creation
 - repo deployed to `/opt/ig-dashboard`
 - scraper working directory at `/opt/ig-dashboard/scraper`
 
-Basic setup:
+### First-run setup on the server
+
+SSH in as root:
+
+```bash
+ssh root@YOUR_SERVER_IP
+```
+
+Install packages:
 
 ```bash
 sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip
+```
+
+Create the deploy user:
+
+```bash
+sudo adduser deploy
+sudo usermod -aG sudo deploy
+sudo mkdir -p /home/deploy/.ssh
+sudo cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
+sudo chown -R deploy:deploy /home/deploy/.ssh
+sudo chmod 700 /home/deploy/.ssh
+sudo chmod 600 /home/deploy/.ssh/authorized_keys
+su - deploy
+```
+
+Clone the repo and create the Python environment:
+
+```bash
 sudo mkdir -p /opt
+sudo chown -R "$USER":"$USER" /opt
 cd /opt
-sudo git clone https://github.com/jonthorir5-afk/ig-dashboard.git
-sudo chown -R "$USER":"$USER" /opt/ig-dashboard
+git clone https://github.com/jonthorir5-afk/ig-dashboard.git
 cd /opt/ig-dashboard/scraper
 python3 -m venv .venv
 source .venv/bin/activate
@@ -117,6 +145,17 @@ Production `.env` on the VPS should contain:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
 - `ROCKETAPI_KEY`
+
+No Instagram session, burner account, proxy, or Reddit credentials are needed.
+
+Test both scrapers manually before enabling timers:
+
+```bash
+cd /opt/ig-dashboard/scraper
+source .venv/bin/activate
+python scrape.py
+python scrape_reddit.py
+```
 
 ## systemd timers on the VPS
 
@@ -175,3 +214,13 @@ journalctl -u reddit-scraper.service -n 100 --no-pager
 - The Reddit scraper sleeps 2 seconds between accounts.
 - The Reddit scraper will warn that `accounts.last_scraped_at` is missing in Supabase and fall back to updating only `data_source`. This is expected with the current schema and does not block snapshot writes.
 - If RocketAPI or Reddit has a transient failure, rerun the corresponding `systemctl start ...service` command and then inspect the journal logs.
+- To update deployed code later:
+
+```bash
+cd /opt/ig-dashboard
+git pull origin main
+cd scraper
+source .venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl daemon-reload
+```

@@ -1,6 +1,6 @@
 # Ops Costs
 
-This note tracks the services involved in running the dashboard and the Instagram scraper, plus which ones are still needed.
+This note tracks the services involved in running the dashboard and the current Instagram + Reddit scraper stack, plus which ones are still needed.
 
 All prices below are approximate and should be re-checked before making billing decisions.
 
@@ -27,17 +27,11 @@ All prices below are approximate and should be re-checked before making billing 
   - https://supabase.com/docs/guides/platform/billing-on-supabase
   - https://supabase.com/docs/guides/platform/billing-faq
 
-### Instagram Burner Account
-- Purpose: authenticated observer account for `instagrapi`
+### RocketAPI
+- Purpose: Instagram scraping provider for follower counts, posts, and reel play counts
 - Status: needed
-- Typical cost: $0
-- Notes: should be treated as an operations asset, not a personal account
-
-### instagrapi Scraper
-- Purpose: replaces the old Apify-based Instagram scraping flow
-- Status: needed
-- Typical cost: $0 software cost
-- Notes: lives in [`scraper/README.md`](/Users/melkorkadkristinsdottir/Documents/igdash/ig-dashboard/scraper/README.md)
+- Typical cost: depends on the active RocketAPI plan
+- Notes: this is now the production Instagram data source
 
 ### Local Mac Host
 - Purpose: can run the daily scraper for now
@@ -48,34 +42,22 @@ All prices below are approximate and should be re-checked before making billing 
 ## Recommended Soon
 
 ### Small VPS
-- Purpose: always-on host for the daily Instagram scraper
+- Purpose: always-on host for the daily Instagram + Reddit scrapers
 - Status: recommended later
 - Typical cost:
-  - Hetzner small cloud server: about EUR 4.99/mo before VAT for a low-end instance plus IPv4
+  - DigitalOcean Droplet, 2 GB RAM: about $12/mo
 - Notes:
-  - makes the scraper independent of a local Mac
-  - better place for cron, logs, `.env`, and `session.json`
+  - makes both scrapers independent of a local Mac
+  - better place for `systemd` timers, logs, and `.env`
   - likely the cleanest next infra upgrade
 - Sources:
-  - https://www.hetzner.com/cloud/
-  - https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/
-
-### Residential Proxy
-- Purpose: reduces Instagram session instability and lowers risk of `login_required` / challenge loops
-- Status: strongly recommended
-- Typical cost:
-  - Decodo residential plans: roughly $11.25/mo for 3 GB, $35/mo for 10 GB
-  - Pay-as-you-go options may be around $4/GB
-- Notes:
-  - especially useful once the scraper moves to a VPS
-  - the main operational stability add-on still missing from the setup
-- Source: https://decodo.com/proxies/residential-proxies/pricing
+  - https://www.digitalocean.com/pricing/droplets
 
 ## Not Needed For Instagram Anymore
 
 ### Apify
 - Purpose before: Instagram scraping via actors
-- Status: no longer needed for Instagram if the `instagrapi` pipeline is the source of truth
+- Status: no longer needed for Instagram if the RocketAPI pipeline is the source of truth
 - Typical cost:
   - Starter: about $29/mo plus usage
 - Why not needed:
@@ -97,8 +79,7 @@ All prices below are approximate and should be re-checked before making billing 
 ### Lowest-Cost Working Version
 - Netlify
 - Supabase
-- Instagram burner account
-- `instagrapi` scraper
+- RocketAPI
 - local Mac running a daily scheduled job
 
 Expected rough monthly cost:
@@ -107,18 +88,15 @@ Expected rough monthly cost:
 ### Better Production Version
 - Netlify
 - Supabase
-- Instagram burner account
-- `instagrapi` scraper
+- RocketAPI
 - small VPS
-- residential proxy
 
 Expected rough monthly cost:
-- around $16 to $74/mo plus VAT, depending on plan choices
+- around $21 to $46/mo depending on plan choices and current Netlify/Supabase tiers
 
 ## Action Notes
 
-- Keep: Netlify, Supabase, `instagrapi`
+- Keep: Netlify, Supabase, RocketAPI
 - Add later: VPS
-- Add when possible: residential proxy
 - Retire for Instagram: Apify, Make.com
 - Re-check prices before purchase since vendor pricing can change
