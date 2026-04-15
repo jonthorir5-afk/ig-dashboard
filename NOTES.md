@@ -1,70 +1,37 @@
-# Follow-Up Notes
+# Project Notes
 
-## Figure Out Later
+## Active data sources
+| Platform | Provider | Auth method |
+|---|---|---|
+| Instagram | RocketAPI get_media | ROCKETAPI_KEY in .env |
+| Reddit | Public JSON API + over18 cookie | No credentials needed |
+| TikTok | [current provider] | |
+| OnlyFans | OnlyFansAPI tracking links | |
 
-- OnlyFans revenue mismatch: dashboard is using OnlyFansAPI tracking-link revenue, which may use a narrower attribution model than the CRM numbers. Ariana's `twitter` / `c45` link is one confirmed example to revisit later. Compare the exact OnlyFansAPI response fields against the CRM's lifetime revenue definition before changing the dashboard logic.
-- OnlyFans API access gap: several models currently show `No matching connected OF account found` during sync (for example `angelmoon`, `gia`, `lola`, `maple`, `bella`). This likely means the end user still needs to connect those specific OF accounts inside OnlyFansAPI before the dashboard can sync subscribers, tracking links, or revenue for them.
-- Moxie OnlyFans account ambiguity: there appear to be 2 OF identities associated with Moxie (for example `ts.moxie` and `moxiedoll` / similar variants), but OnlyFansAPI currently exposes only 1 of them. This may be a free-account vs paid-account split. Before finalizing OF link mappings or dashboard expectations, confirm which OF account is the tracked monetized one and whether the missing account is intentionally outside the API connection.
-- Instagram sync blocker: Apify is returning `usage_exceeded` for some Instagram follower-count runs. Increase Apify usage / credits / actor access first, then resume testing the Instagram follower sync flow.
-- Instagram follow-up: Apify and Netlify credits were increased on 2026-04-02, so the Instagram follower sync flow should be re-tested and stabilized next.
-- Meta Instagram auth follow-up: the new Meta-backed Instagram connection flow is scaffolded, but Instagram OAuth is still failing on Instagram's side with `Sorry, this page isn't available` before the callback is reached. Redirect URI appears correct, so the next likely blockers are Meta app/use-case configuration or the requested scope. Resume by testing with `META_INSTAGRAM_SCOPES=instagram_business_basic` and re-checking the Meta Instagram Login setup.
-- VPS follow-up: move the new `scraper/` Instagram + Reddit pipelines onto a small always-on DigitalOcean VPS later so the daily runs do not depend on a local Mac staying awake. When doing this, also add the scraper `.env`, `systemd` timers, and logs directory.
+## Known limitations
+- Instagram play counts (views) are suppressed by Instagram for NSFW accounts on all external scrapers except RocketAPI
+- ts.moxie consistently returns views=0 — this account appears to post mostly carousels rather than reels
+- Reddit API returns max 100 posts per request. Pagination is implemented and triggers automatically for active accounts. A warning is logged if pagination is insufficient.
 
-## Instagram Conclusion: RocketAPI works for play counts on NSFW accounts
+## Pending — requires client input
+1. OnlyFans revenue mismatch: dashboard uses tracking-link revenue from OnlyFansAPI. Client needs to confirm whether tracking-link revenue or CRM total is the source of truth. Ariana's twitter/c45 link flagged as a specific example.
 
-**Date updated:** 2026-04-06  
-**Status:** Working solution confirmed
+2. Reddit metrics clarification needed before Reddit UI is finalized:
+   - "Number of posts" = lifetime total or per 1d/7d/30d?
+   - "Replies" = comments received or comments written?
+   - Need 30d/90d windows or just 1d/7d?
+   - Are there more Reddit accounts beyond the current 4?
 
-### What's happening
+3. Missing accounts: confirm whether all Instagram, TikTok, Reddit and OnlyFans accounts are in the system.
 
-The Instagram scraper no longer depends on `instagrapi`, burner accounts, session files, or HikerAPI for play counts. The working provider is now RocketAPI using:
+## Pending — infrastructure
+- VPS setup: both scrapers currently run manually. For reliable daily data, move to a small always-on VPS (e.g. DigitalOcean $6/mo droplet) and set up cron jobs. See scraper/README.md for cron job commands.
 
-- `POST /instagram/user/get_info`
-- `POST /instagram/user/get_media`
+## Pending — Reddit API registration
+- Submitted API access request to Reddit (April 2026)
+- Currently using public JSON API with over18 cookie trick
+- If Reddit approves the app, migrate to PRAW for more reliable authenticated access
+- Credentials will go in .env as REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET
 
-This flow successfully returns reel/video `play_count` values for our NSFW and age-restricted accounts, and those values are now written into `ig_views_7d` in `snapshots`.
-
-### What was tested
-
-- `instagrapi` returned reels but often exposed `view_count=0` for NSFW accounts
-- HikerAPI returned recent reels for some accounts, but `play_count` was still `0`
-- SociaVault returned `Profile is restricted` and was not usable for these accounts
-- RocketAPI `get_media` returned real media items with non-zero `play_count` values on the same accounts
-
-### Conclusion
-
-RocketAPI via the `get_media` endpoint is the working solution for Instagram play counts on NSFW accounts. The scraper should treat RocketAPI as the active Instagram provider going forward.
-
-### Notes
-
-- Metrics are currently calculated from the 12 most recent posts returned by RocketAPI
-- `ig_views_7d` is populated from `play_count` on `media_type == 2` items
-- Some individual accounts may still return `0` on specific runs, but the provider/path is now proven to work overall
-- `captured_by` for the new Instagram snapshots should be `rocketapi`
-
-### What is NOT possible externally
-
-Reach, impressions, profile visits, and story views are gated behind Instagram's official Graph API and require account-owner authentication. No external scraper can reliably access these for any account.
-
-## Reddit dashboard metrics — needs client clarification
-
-The client's stated metrics are:
-"number of posts, upvotes per day, upvotes per week, average upvotes per day/week, replies"
-
-Before building the Reddit tab UI, confirm with the client:
-
-1. "Number of posts" — does this mean:
-   - Total posts ever made (lifetime)?
-   - Posts per 1d / 7d / 30d / 90d time window?
-   - Both?
-
-2. "Replies" — does this mean:
-   - Comments received on their posts?
-   - Comments they wrote themselves?
-   - Both?
-
-3. Total accumulated karma since account creation, or karma earned in last 7/30 days only?
-
-4. Does he need 30d and 90d windows, or just 1d and 7d?
-
-Note: Reddit's public API gives us reliable access to profile karma, submissions, comment activity, post scores, and subreddit posting history. It does not directly provide a clean "comments received on posts" metric without extra thread-level scraping, so that specific definition needs to be agreed before building the UI around it.
+## What is NOT possible externally (Instagram)
+Reach, impressions, profile visits, and story views require account-owner Instagram Graph API access. No external scraper can access these metrics.
