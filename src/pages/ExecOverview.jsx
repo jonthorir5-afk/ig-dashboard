@@ -1,12 +1,33 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, Users, MousePointerClick, AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Download, BarChart3 } from 'lucide-react'
-import { getExecOverview, getAllSnapshotHistory, getLinkMappings } from '../lib/api'
+import { getExecOverview, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, exportToCSV } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
 import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
 import BarChartComponent from '../components/charts/BarChart'
+
+function MetricCard({ icon, iconClass, label, value, trend, trendLabel }) {
+  const Icon = icon
+
+  return (
+    <div className="metric-card glass-panel">
+      <div className={`metric-icon ${iconClass}`}>
+        <Icon size={24} />
+      </div>
+      <div className="metric-data">
+        <p className="metric-label">{label}</p>
+        <h3 className="metric-value">{value}</h3>
+        {trend != null && (
+          <span className={`metric-trend ${Number(trend) >= 0 ? 'positive' : 'negative'}`}>
+            {Number(trend) >= 0 ? '+' : ''}{trend}% {trendLabel || 'vs last week'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function ExecOverview() {
   const [data, setData] = useState(null)
@@ -264,23 +285,6 @@ export default function ExecOverview() {
   }
 
   if (!stats) return null
-
-  const MetricCard = ({ icon: Icon, iconClass, label, value, trend, trendLabel }) => (
-    <div className="metric-card glass-panel">
-      <div className={`metric-icon ${iconClass}`}>
-        <Icon size={24} />
-      </div>
-      <div className="metric-data">
-        <p className="metric-label">{label}</p>
-        <h3 className="metric-value">{value}</h3>
-        {trend != null && (
-          <span className={`metric-trend ${Number(trend) >= 0 ? 'positive' : 'negative'}`}>
-            {Number(trend) >= 0 ? '+' : ''}{trend}% {trendLabel || 'vs last week'}
-          </span>
-        )}
-      </div>
-    </div>
-  )
 
   return (
     <div className="dashboard-container">

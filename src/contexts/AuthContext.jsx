@@ -1,15 +1,13 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { isDemoMode, enableDemoMode, disableDemoMode, mockDemoUser, mockDemoProfile } from '../lib/mockData'
-
-const AuthContext = createContext({})
-
-export const useAuth = () => useContext(AuthContext)
+import AuthContext from './auth-context'
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const demoMode = isDemoMode()
+  const [user, setUser] = useState(() => (demoMode ? mockDemoUser : null))
+  const [profile, setProfile] = useState(() => (demoMode ? mockDemoProfile : null))
+  const [loading, setLoading] = useState(() => !demoMode)
 
   const fetchProfile = async (userId) => {
     const { data } = await supabase
@@ -23,10 +21,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // If demo mode is active, skip Supabase auth
     if (isDemoMode()) {
-      setUser(mockDemoUser)
-      setProfile(mockDemoProfile)
-      setLoading(false)
-      return
+      return undefined
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -50,7 +45,7 @@ export function AuthProvider({ children }) {
       })
       subscription = result.data.subscription
     } catch {
-      setLoading(false)
+      Promise.resolve().then(() => setLoading(false))
     }
 
     return () => subscription?.unsubscribe()

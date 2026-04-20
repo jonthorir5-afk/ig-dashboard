@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Search, X, Download, Edit2, Trash2 } from 'lucide-react'
 import { getAccounts, getModels, getProfiles, createAccount, updateAccount, deleteAccount, getLatestOFTracking } from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 import { healthColor, exportToCSV } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
 

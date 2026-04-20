@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Download, Printer, Calendar, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
-import { getAccounts, getAllSnapshotHistory, getLatestSnapshots } from '../lib/api'
+import { getAccounts, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade, exportToCSV } from '../lib/metrics'
 import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, COLORS } from '../components/charts/TrendChart'
@@ -8,13 +8,12 @@ import { TrendChart, COLORS } from '../components/charts/TrendChart'
 export default function WeeklyDigestPage() {
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
-  const [latest, setLatest] = useState([])
   const [loading, setLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, -1 = last week, etc.
 
   useEffect(() => {
-    Promise.all([getAccounts(), getAllSnapshotHistory(60), getLatestSnapshots()])
-      .then(([accs, snaps, lat]) => { setAccounts(accs); setSnapshots(snaps); setLatest(lat) })
+    Promise.all([getAccounts(), getAllSnapshotHistory(60)])
+      .then(([accs, snaps]) => { setAccounts(accs); setSnapshots(snaps) })
       .finally(() => setLoading(false))
   }, [])
 

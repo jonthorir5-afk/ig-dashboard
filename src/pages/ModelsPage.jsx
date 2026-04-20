@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit2, Trash2, ChevronRight, X } from 'lucide-react'
 import { getModels, createModel, updateModel, deleteModel } from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 
 const STATUS_OPTIONS = ['Active', 'Onboarding', 'Paused', 'Terminated']
 const statusColor = (s) => {
@@ -27,7 +27,10 @@ export default function ModelsPage() {
     setLoading(true)
     getModels().then(setModels).finally(() => setLoading(false))
   }
-  useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    getModels().then(setModels).finally(() => setLoading(false))
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

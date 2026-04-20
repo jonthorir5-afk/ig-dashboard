@@ -12,6 +12,10 @@ dist
 .env
 dist-ssr
 *.local
+*.py[cod]
+**/__pycache__/
+scraper/.venv*/
+scraper/.pytest_cache/
 
 # Editor directories and files
 .vscode/*

@@ -31,17 +31,10 @@ function normalizeHandle(handle) {
   return (handle || '').trim().replace(/^@/, '').toLowerCase()
 }
 
-function sumMetric(entries, metricName) {
+function sumMetric(entries) {
   return (entries || []).reduce((sum, entry) => {
     const value = Number(entry?.values?.[0]?.value || 0)
     return sum + (Number.isFinite(value) ? value : 0)
-  }, 0)
-}
-
-function maxMetric(entries, metricName) {
-  return (entries || []).reduce((max, entry) => {
-    const value = Number(entry?.values?.[0]?.value || 0)
-    return Number.isFinite(value) && value > max ? value : max
   }, 0)
 }
 

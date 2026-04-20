@@ -94,12 +94,12 @@ export default function CSVImport({ accounts, userId, onComplete }) {
     setStep('importing')
     let success = 0, failed = 0
     const importErrs = []
+    const nextRows = rows.map(row => ({ ...row }))
 
-    for (const row of rows) {
+    for (const row of nextRows) {
       if (row._status !== 'ready') { failed++; continue }
 
       const account = row._account
-      const platform = account.platform
 
       try {
         const data = {
@@ -161,6 +161,7 @@ export default function CSVImport({ accounts, userId, onComplete }) {
       }
     }
 
+    setRows(nextRows)
     setImportResults({ success, failed, errors: importErrs })
     setStep('done')
     if (onComplete) onComplete(success)

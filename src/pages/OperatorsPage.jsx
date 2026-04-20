@@ -3,7 +3,7 @@ import { Plus, Check, Clock, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { getProfiles, getAccounts, getLatestSnapshots } from '../lib/api'
 import { formatNumber, healthColor, getSnapshotViews } from '../lib/metrics'
 import { getTasks, createTask, updateTask, deleteTask, logAudit } from '../lib/automation'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 
 const TASK_PRIORITIES = ['urgent', 'high', 'normal', 'low']
 const PRIORITY_COLORS = {

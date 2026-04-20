@@ -40,6 +40,11 @@ function computeAvgUpvotes(avgValue, upvotes, posts) {
   return Math.round((upvotes || 0) / posts)
 }
 
+function renderSortIcon(sortKey, sortDir, columnKey) {
+  if (sortKey !== columnKey) return null
+  return sortDir === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+}
+
 export default function PlatformPage() {
   const { platform } = useParams()
   const [accounts, setAccounts] = useState([])
@@ -51,12 +56,8 @@ export default function PlatformPage() {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('followers')
   const [sortDir, setSortDir] = useState('desc')
-  const [selectedPlatform, setSelectedPlatform] = useState(platform || '')
   const [selectedModelIds, setSelectedModelIds] = useState([])
-
-  useEffect(() => {
-    setSelectedPlatform(platform || '')
-  }, [platform])
+  const selectedPlatform = platform || ''
 
   useEffect(() => {
     Promise.all([getAccounts(), getLatestSnapshots(), getAllSnapshotHistory(60), getLatestOFTracking(90), getLinkMappings()])
@@ -123,8 +124,6 @@ export default function PlatformPage() {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
     else { setSortKey(key); setSortDir('desc') }
   }
-
-  const SortIcon = ({ k }) => sortKey === k ? (sortDir === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />) : null
 
   const modelOptions = useMemo(() => {
     const map = new Map()
@@ -318,34 +317,34 @@ export default function PlatformPage() {
                 <th>Model</th>
                 {!selectedPlatform && <th>Platform</th>}
                 <th>Health</th>
-                {showFollowerColumn && <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers <SortIcon k="followers" /></th>}
+                {showFollowerColumn && <th className="sortable numeric" onClick={() => requestSort('followers')}>Followers {renderSortIcon(sortKey, sortDir, 'followers')}</th>}
                 {showTrendColumn && <th style={{ textAlign: 'center' }}>Trend</th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igLikes')}>Likes 7d <SortIcon k="igLikes" /></th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igComments')}>Comments 7d <SortIcon k="igComments" /></th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igShares')}>Shares 7d <SortIcon k="igShares" /></th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igSaves')}>Saves 7d <SortIcon k="igSaves" /></th>}
-                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
-                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twLikes')}>Likes 7d <SortIcon k="twLikes" /></th>}
-                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twRetweets')}>RTs 7d <SortIcon k="twRetweets" /></th>}
-                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twReplies')}>Replies 7d <SortIcon k="twReplies" /></th>}
-                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twBookmarks')}>Bookmarks 7d <SortIcon k="twBookmarks" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts1d')}>Posts 1d <SortIcon k="rdPosts1d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts7d')}>Posts 7d <SortIcon k="rdPosts7d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes1d')}>Upvotes 1d <SortIcon k="rdUpvotes1d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes7d')}>Upvotes 7d <SortIcon k="rdUpvotes7d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes1d')}>Avg Upvotes 1d <SortIcon k="rdAvgUpvotes1d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes7d')}>Avg Upvotes 7d <SortIcon k="rdAvgUpvotes7d" /></th>}
-                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdReplies7d')}>Replies 7d <SortIcon k="rdReplies7d" /></th>}
-                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d <SortIcon k="views" /></th>}
-                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d <SortIcon k="clicks" /></th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d {renderSortIcon(sortKey, sortDir, 'views')}</th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igLikes')}>Likes 7d {renderSortIcon(sortKey, sortDir, 'igLikes')}</th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igComments')}>Comments 7d {renderSortIcon(sortKey, sortDir, 'igComments')}</th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igShares')}>Shares 7d {renderSortIcon(sortKey, sortDir, 'igShares')}</th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('igSaves')}>Saves 7d {renderSortIcon(sortKey, sortDir, 'igSaves')}</th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d {renderSortIcon(sortKey, sortDir, 'views')}</th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twLikes')}>Likes 7d {renderSortIcon(sortKey, sortDir, 'twLikes')}</th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twRetweets')}>RTs 7d {renderSortIcon(sortKey, sortDir, 'twRetweets')}</th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twReplies')}>Replies 7d {renderSortIcon(sortKey, sortDir, 'twReplies')}</th>}
+                {showTwitterMetrics && <th className="sortable numeric" onClick={() => requestSort('twBookmarks')}>Bookmarks 7d {renderSortIcon(sortKey, sortDir, 'twBookmarks')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts1d')}>Posts 1d {renderSortIcon(sortKey, sortDir, 'rdPosts1d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdPosts7d')}>Posts 7d {renderSortIcon(sortKey, sortDir, 'rdPosts7d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes1d')}>Upvotes 1d {renderSortIcon(sortKey, sortDir, 'rdUpvotes1d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdUpvotes7d')}>Upvotes 7d {renderSortIcon(sortKey, sortDir, 'rdUpvotes7d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes1d')}>Avg Upvotes 1d {renderSortIcon(sortKey, sortDir, 'rdAvgUpvotes1d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdAvgUpvotes7d')}>Avg Upvotes 7d {renderSortIcon(sortKey, sortDir, 'rdAvgUpvotes7d')}</th>}
+                {showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('rdReplies7d')}>Replies 7d {renderSortIcon(sortKey, sortDir, 'rdReplies7d')}</th>}
+                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('views')}>Views 7d {renderSortIcon(sortKey, sortDir, 'views')}</th>}
+                {!showInstagramMetrics && !showTwitterMetrics && !showRedditMetrics && <th className="sortable numeric" onClick={() => requestSort('clicks')}>Clicks 7d {renderSortIcon(sortKey, sortDir, 'clicks')}</th>}
                 <th className="numeric">OF Link</th>
-                <th className="sortable numeric" onClick={() => requestSort('ofClicks')}>OF Clicks <SortIcon k="ofClicks" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs <SortIcon k="ofSubs" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('ofCvr')}>CVR <SortIcon k="ofCvr" /></th>
-                <th className="sortable numeric" onClick={() => requestSort('ofRevenue')}>Revenue <SortIcon k="ofRevenue" /></th>
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR <SortIcon k="vtfr" /></th>}
-                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('er')}>ER <SortIcon k="er" /></th>}
+                <th className="sortable numeric" onClick={() => requestSort('ofClicks')}>OF Clicks {renderSortIcon(sortKey, sortDir, 'ofClicks')}</th>
+                <th className="sortable numeric" onClick={() => requestSort('ofSubs')}>OF Subs {renderSortIcon(sortKey, sortDir, 'ofSubs')}</th>
+                <th className="sortable numeric" onClick={() => requestSort('ofCvr')}>CVR {renderSortIcon(sortKey, sortDir, 'ofCvr')}</th>
+                <th className="sortable numeric" onClick={() => requestSort('ofRevenue')}>Revenue {renderSortIcon(sortKey, sortDir, 'ofRevenue')}</th>
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('vtfr')}>VTFR {renderSortIcon(sortKey, sortDir, 'vtfr')}</th>}
+                {showInstagramMetrics && <th className="sortable numeric" onClick={() => requestSort('er')}>ER {renderSortIcon(sortKey, sortDir, 'er')}</th>}
               </tr>
             </thead>
             <tbody>

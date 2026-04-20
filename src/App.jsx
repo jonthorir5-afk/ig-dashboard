@@ -5,7 +5,8 @@ import {
   LogOut, ChevronRight, ChevronDown, Globe, AlertTriangle, ClipboardList, BarChart3, FileText,
   Database, TestTube2
 } from 'lucide-react'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthProvider } from './contexts/AuthContext'
+import { useAuth } from './contexts/useAuth'
 import { isDemoMode, enableDemoMode, disableDemoMode } from './lib/mockData'
 import LoginPage from './components/LoginPage'
 import ExecOverview from './pages/ExecOverview'
@@ -20,7 +21,8 @@ import BenchmarkPage from './pages/BenchmarkPage'
 import WeeklyDigestPage from './pages/WeeklyDigestPage'
 import './App.css'
 
-function NavItem({ to, icon: Icon, label, badge, nested, exact }) {
+function NavItem({ to, icon, label, badge, nested, exact }) {
+  const Icon = icon
   const location = useLocation()
   const isActive = exact
     ? location.pathname === to
@@ -35,7 +37,8 @@ function NavItem({ to, icon: Icon, label, badge, nested, exact }) {
   )
 }
 
-function NavDropdown({ icon: Icon, label, children, nested }) {
+function NavDropdown({ icon, label, children, nested }) {
+  const Icon = icon
   const location = useLocation()
   const getAllPaths = (items) => {
     let paths = []

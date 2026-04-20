@@ -60,7 +60,9 @@ export function getAlertRules() {
   try {
     const stored = localStorage.getItem(ALERT_RULES_KEY)
     if (stored) return { ...DEFAULT_ALERT_RULES, ...JSON.parse(stored) }
-  } catch {}
+  } catch {
+    return { ...DEFAULT_ALERT_RULES }
+  }
   return { ...DEFAULT_ALERT_RULES }
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 import { Lock, Mail, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react'
 
 export default function LoginPage() {

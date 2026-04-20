@@ -4,7 +4,8 @@ import { Download } from 'lucide-react'
 import { getAccounts, getAllSnapshotHistory } from '../lib/api'
 import { formatNumber, getSnapshotViews, getSnapshotClicks, vtfrGrade, erGrade, exportToCSV } from '../lib/metrics'
 import BarChartComponent from '../components/charts/BarChart'
-import HeatmapGrid, { viewsColorScale } from '../components/charts/HeatmapGrid'
+import HeatmapGrid from '../components/charts/HeatmapGrid'
+import { viewsColorScale } from '../components/charts/heatmapScales'
 import { COLORS } from '../components/charts/TrendChart'
 import Sparkline from '../components/charts/Sparkline'
 
@@ -16,11 +17,11 @@ export default function BenchmarkPage() {
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filterPlatform, setFilterPlatform] = useState(urlPlatform || '')
+  const [platformFilter, setPlatformFilter] = useState('')
   const [filterModel, setFilterModel] = useState('')
   const [timeRange, setTimeRange] = useState(30)
-
-  useEffect(() => { setFilterPlatform(urlPlatform || '') }, [urlPlatform])
+  const [referenceTime] = useState(() => Date.now())
+  const filterPlatform = urlPlatform || platformFilter
 
   useEffect(() => {
     Promise.all([getAccounts(), getAllSnapshotHistory(90)])
@@ -38,7 +39,7 @@ export default function BenchmarkPage() {
     if (filterPlatform) filteredAccounts = filteredAccounts.filter(account => account.platform === filterPlatform)
     if (filterModel) filteredAccounts = filteredAccounts.filter(account => account.model_id === filterModel)
 
-    const cutoff = new Date(Date.now() - timeRange * 86400000).toISOString().split('T')[0]
+    const cutoff = new Date(referenceTime - timeRange * 86400000).toISOString().split('T')[0]
     const relevantSnapshots = snapshots.filter(snapshot => snapshot.snapshot_date >= cutoff)
 
     const snapshotsByAccount = {}
@@ -102,7 +103,7 @@ export default function BenchmarkPage() {
     }
 
     return rows
-  }, [accounts, snapshots, filterPlatform, filterModel, timeRange, isRedditBenchmark])
+  }, [accounts, snapshots, filterPlatform, filterModel, timeRange, isRedditBenchmark, referenceTime])
 
   const visibleBenchmark = useMemo(() => {
     if (filterPlatform) return benchmark
@@ -137,7 +138,7 @@ export default function BenchmarkPage() {
     if (isRedditBenchmark || !snapshots.length) return { rows: [], columns: [] }
 
     const weekSet = new Set()
-    const cutoff = new Date(Date.now() - timeRange * 86400000)
+    const cutoff = new Date(referenceTime - timeRange * 86400000)
 
     for (const snapshot of snapshots) {
       if (filterPlatform && snapshot.account?.platform !== filterPlatform) continue
@@ -181,7 +182,7 @@ export default function BenchmarkPage() {
       })),
       columns,
     }
-  }, [snapshots, timeRange, isRedditBenchmark, filterPlatform])
+  }, [snapshots, timeRange, isRedditBenchmark, filterPlatform, referenceTime])
 
   const vtfrBarData = useMemo(() =>
     visibleBenchmark.slice(0, 15).map(row => ({
@@ -278,7 +279,7 @@ export default function BenchmarkPage() {
       </div>
 
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)} style={selectStyle}>
+        <select value={filterPlatform} onChange={e => setPlatformFilter(e.target.value)} style={selectStyle} disabled={Boolean(urlPlatform)}>
           <option value="">All Platforms</option>
           <option value="instagram">Instagram</option>
           <option value="twitter">Twitter / X</option>

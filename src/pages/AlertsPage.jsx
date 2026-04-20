@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Settings, Download, Check, X, Bell } from 'lucide-react'
 import { getAccounts, getLatestSnapshots, getAllSnapshotHistory } from '../lib/api'
-import { healthColor, formatNumber, getSnapshotViews, exportToCSV, vtfrGrade, erGrade } from '../lib/metrics'
+import { formatNumber, exportToCSV, vtfrGrade, erGrade } from '../lib/metrics'
 import { getAlertRules, saveAlertRules, DEFAULT_ALERT_RULES } from '../lib/automation'
 
 export default function AlertsPage() {
@@ -12,6 +12,7 @@ export default function AlertsPage() {
   const [filter, setFilter] = useState('all')
   const [showSettings, setShowSettings] = useState(false)
   const [rules, setRules] = useState(getAlertRules)
+  const [referenceTime] = useState(() => Date.now())
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('ig_dismissed_alerts') || '[]')) } catch { return new Set() }
   })
@@ -48,7 +49,7 @@ export default function AlertsPage() {
     for (const a of accounts) {
       const snap = snapByAccount[a.id]
       const prev = prevSnapByAccount[a.id]
-      const sevenDaysAgo = new Date(Date.now() - rules.missing_data_days * 86400000).toISOString().split('T')[0]
+      const sevenDaysAgo = new Date(referenceTime - rules.missing_data_days * 86400000).toISOString().split('T')[0]
 
       // Health issues
       if (rules.health_enabled && a.health !== 'Clean') {
@@ -133,7 +134,7 @@ export default function AlertsPage() {
 
       // Stale new account
       if (a.status === 'Active') {
-        const daysSinceCreated = Math.floor((Date.now() - new Date(a.created_at).getTime()) / 86400000)
+        const daysSinceCreated = Math.floor((referenceTime - new Date(a.created_at).getTime()) / 86400000)
         if (daysSinceCreated > rules.stale_account_days && (!snap || (snap.followers || 0) < 10)) {
           items.push({
             id: `stale-${a.id}`,
@@ -150,7 +151,7 @@ export default function AlertsPage() {
     const severityOrder = { critical: 0, warning: 1, info: 2 }
     items.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
     return items
-  }, [accounts, snapshots, prevSnapByAccount, rules])
+  }, [accounts, snapshots, prevSnapByAccount, referenceTime, rules])
 
   const filtered = useMemo(() => {
     let result = alerts

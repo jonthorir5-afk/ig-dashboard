@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Globe } from 'lucide-react'
 import { getModel, getAccounts, getSnapshotHistory, getOFTracking } from '../lib/api'
-import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor, vtfrGrade, erGrade } from '../lib/metrics'
+import { formatNumber, getSnapshotViews, getSnapshotClicks, healthColor } from '../lib/metrics'
 import { getDisplayHandle } from '../lib/accountDisplay'
 import { fillDailySeries } from '../lib/timeSeries'
 import { TrendChart, AreaTrendChart, COLORS } from '../components/charts/TrendChart'
 import Sparkline from '../components/charts/Sparkline'
-import HeatmapGrid, { vtfrColorScale, viewsColorScale } from '../components/charts/HeatmapGrid'
+import HeatmapGrid from '../components/charts/HeatmapGrid'
+import { viewsColorScale } from '../components/charts/heatmapScales'
 
 export default function ModelDetailPage() {
   const { id } = useParams()
@@ -72,6 +73,9 @@ export default function ModelDetailPage() {
   const totalOFRevenue = latestOFArr.reduce((sum, row) => sum + Number(row.revenue_total || 0), 0)
 
   const ofAccountRanking = useMemo(() => {
+    const totalClicks = Object.values(latestOFByAccount).reduce((sum, row) => sum + (row?.clicks || 0), 0)
+    const totalSubs = Object.values(latestOFByAccount).reduce((sum, row) => sum + (row?.subscribers || 0), 0)
+
     return accounts.map(account => {
       const of = latestOFByAccount[account.id] || null
       const clicks = of?.clicks || 0
@@ -84,11 +88,11 @@ export default function ModelDetailPage() {
         subscribers,
         revenue,
         cvr: clicks > 0 ? (subscribers / clicks) * 100 : 0,
-        shareOfSubs: totalOFSubs > 0 ? (subscribers / totalOFSubs) * 100 : 0,
-        shareOfClicks: totalOFClicks > 0 ? (clicks / totalOFClicks) * 100 : 0,
+        shareOfSubs: totalSubs > 0 ? (subscribers / totalSubs) * 100 : 0,
+        shareOfClicks: totalClicks > 0 ? (clicks / totalClicks) * 100 : 0,
       }
     }).sort((a, b) => b.subscribers - a.subscribers || b.clicks - a.clicks)
-  }, [accounts, latestOFByAccount, totalOFClicks, totalOFSubs])
+  }, [accounts, latestOFByAccount])
 
   // Per-platform combined stats (for platforms with multiple accounts)
   const platformStats = useMemo(() => {
